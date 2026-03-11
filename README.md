@@ -152,5 +152,45 @@ docker compose pull && docker compose up -d  # Update
 - [x] Web research (Tavily + built-in web_search)
 - [x] Docker deployment + deploy script
 - [x] Caddy reverse proxy (auto-HTTPS)
+- [x] Railway deployment (auto-deploy on merge)
 - [ ] CouchDB + LiveSync (multi-device vault sync)
 - [ ] Backup/restore scripts
+
+## Railway Deployment (Recommended)
+
+Railway auto-deploys on every push/merge to `main`.
+
+### 1. Connect to Railway
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Select `huginn-second-brain`
+3. Railway will detect the `Dockerfile` and build automatically
+
+### 2. Set environment variables
+
+In Railway dashboard → your service → **Variables**, add:
+
+| Variable | Value |
+|----------|-------|
+| `OPENROUTER_API_KEY` | `sk-or-...` |
+| `TAVILY_API_KEY` | `tvly-...` |
+| `TELEGRAM_BOT_TOKEN` | `1234567890:ABC...` |
+| `GATEWAY_TOKEN` | (generate with `openssl rand -hex 24`) |
+
+### 3. Deploy
+
+That's it! Railway builds and deploys on every merge to `main`. You can also trigger manual deploys from the dashboard.
+
+```bash
+# Your workflow:
+git checkout -b feature/my-change
+# make changes to workspace/, config/, etc.
+git commit && git push
+# merge PR → Railway auto-deploys
+```
+
+### Important notes
+
+- **Stop your local gateway** first (`npx openclaw gateway stop`) — only one instance can poll Telegram
+- Railway provides persistent storage via volumes for the vault data
+- No domain/HTTPS needed — Telegram uses long-polling (outbound only)
