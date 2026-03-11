@@ -122,8 +122,14 @@ async function deleteDoc(relPath) {
   }
 }
 
+// LiveSync stores chunks as h:xxx docs and metadata as obsydian_livesync_*.
+// These are internal — vault-sync must never touch them.
+function isLiveSyncInternal(id) {
+  return id.startsWith('h:') || id.startsWith('obsydian_livesync');
+}
+
 async function writeFileFromDoc(doc) {
-  if (!doc._id || doc._id.startsWith('_')) return;
+  if (!doc._id || doc._id.startsWith('_') || isLiveSyncInternal(doc._id)) return;
   const filePath = path.join(VAULT_PATH, doc._id);
   try {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -148,7 +154,7 @@ async function initialPull() {
     const { data } = await axios.get(`${DB_URL}/_all_docs?include_docs=true`, { auth: AUTH });
     for (const row of data.rows || []) {
       const doc = row.doc;
-      if (!doc || doc.deleted || doc._id.startsWith('_')) continue;
+      if (!doc || doc.deleted || doc._id.startsWith('_') || isLiveSyncInternal(doc._id)) continue;
       await writeFileFromDoc(doc);
     }
     console.log(`[vault-sync] Initial pull complete (${data.rows?.length || 0} docs)`);
@@ -201,7 +207,8 @@ async function watchCouchDBChanges(since = 'now') {
       const { data } = await axios.get(url, { auth: AUTH, timeout: 70000 });
       for (const change of data.results || []) {
         if (change.doc?.deleted) continue;
-        // Skip changes that we pushed ourselves
+        // Skip LiveSync internal docs and changes we pushed ourselves
+        if (isLiveSyncInternal(change.id)) continue;
         const rev = change.doc?._rev;
         if (rev && recentPushRevs.has(rev)) continue;
         if (change.doc && !change.id.startsWith('_')) {
