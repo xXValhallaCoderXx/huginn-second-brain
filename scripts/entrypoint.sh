@@ -20,10 +20,12 @@ export OPENCLAW_STATE_DIR="${OPENCLAW_HOME}"
 
 mkdir -p "${OPENCLAW_HOME}/agents/main/agent"
 
-# First run: seed config and workspace from the baked image
-if [ ! -f "${OPENCLAW_HOME}/openclaw.json" ]; then
-  echo "Entrypoint: first run — seeding config and workspace to ${OPENCLAW_HOME}..."
-  cp /app/openclaw.json "${OPENCLAW_HOME}/openclaw.json"
+# Always copy fresh config from baked image (config is managed by the repo)
+cp /app/openclaw.json "${OPENCLAW_HOME}/openclaw.json"
+
+# Only seed workspace on first run (preserves user skills/memory across deploys)
+if [ ! -d "${OPENCLAW_HOME}/workspace" ]; then
+  echo "Entrypoint: first run — seeding workspace to ${OPENCLAW_HOME}..."
   cp -r /app/workspace "${OPENCLAW_HOME}/workspace"
 fi
 
