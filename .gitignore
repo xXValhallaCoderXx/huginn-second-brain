@@ -2,3 +2,8 @@ node_modules/
 .env
 *.key
 *.pem
+
+# Workspace - exclude personal memory content (keep structure)
+workspace/memory/*.md
+workspace/MEMORY.md
+workspace/IDENTITY.md

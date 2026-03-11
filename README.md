@@ -66,29 +66,28 @@ Send a message to your bot — Huginn will respond using Claude Sonnet 4.5 for c
 | Fast queries | Gemini 3 Flash | $3.50 |
 | Heartbeats | Gemini 2.5 Flash-Lite | $0.50 |
 
-## Configuration
-
-- **OpenClaw config**: `~/.openclaw/openclaw.json`
-- **Workspace**: `~/.openclaw/workspace/`
-- **Skills**: `~/.openclaw/workspace/skills/`
-- **API keys**: `~/.openclaw/.env`
-
-## VPS Deployment
-
-```bash
-cp .env.example .env
-# Fill in .env with your API keys
-docker compose up -d
-```
-
 ## Project Structure
 
 ```
-├── docker-compose.yml    # VPS deployment (OpenClaw + future CouchDB/Caddy)
-├── .env.example          # Environment variable template
-├── package.json          # Node dependencies (openclaw)
-└── README.md             # This file
+├── workspace/                # OpenClaw agent workspace (AGENTS.md, SOUL.md, skills/, memory/)
+│   ├── AGENTS.md             # Agent operating instructions + vault workflows
+│   ├── SOUL.md               # Agent persona and tone
+│   ├── USER.md               # Info about you (filled in by the agent)
+│   ├── HEARTBEAT.md          # Periodic check instructions
+│   ├── MEMORY.md             # Long-term curated memory (gitignored)
+│   ├── memory/               # Daily memory logs (gitignored)
+│   └── skills/               # Installed skills (obsidian, tavily-search)
+├── docker-compose.yml        # VPS deployment (OpenClaw + future CouchDB/Caddy)
+├── .env.example              # Environment variable template
+├── package.json              # Node dependencies (openclaw)
+└── README.md                 # This file
 ```
+
+## Configuration
+
+- **OpenClaw config**: `~/.openclaw/openclaw.json` (points workspace here)
+- **API keys**: `~/.openclaw/.env`
+- **Workspace**: `./workspace/` (this repo)
 
 ## Roadmap
 
