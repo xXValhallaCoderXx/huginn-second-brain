@@ -1,0 +1,59 @@
+# Docker Compose for Huginn Second Brain (VPS Deployment)
+# Local testing: run `npx openclaw` directly (no Docker needed)
+# VPS deployment: `docker compose up -d`
+
+services:
+  openclaw:
+    image: node:22-slim
+    container_name: huginn-openclaw
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "npm install -g openclaw@latest &&
+             mkdir -p /root/.openclaw/workspace/memory /root/.openclaw/workspace/skills &&
+             openclaw"
+    volumes:
+      - ./config/openclaw.json:/root/.openclaw/openclaw.json:ro
+      - openclaw-workspace:/root/.openclaw/workspace
+      - openclaw-state:/root/.openclaw
+      - vault-data:/vault
+    ports:
+      - "127.0.0.1:18789:18789"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+
+  # CouchDB for Obsidian LiveSync (Phase 2 — uncomment when ready)
+  # couchdb:
+  #   image: couchdb:3
+  #   container_name: huginn-couchdb
+  #   restart: unless-stopped
+  #   volumes:
+  #     - couchdb-data:/opt/couchdb/data
+  #   environment:
+  #     - COUCHDB_USER=${COUCHDB_USER:-admin}
+  #     - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+  #   ports:
+  #     - "127.0.0.1:5984:5984"
+
+  # Caddy reverse proxy (Phase 2 — uncomment when ready)
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: huginn-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy-data:/data
+  #     - caddy-config:/config
+
+volumes:
+  openclaw-workspace:
+  openclaw-state:
+  vault-data:
+  # couchdb-data:
+  # caddy-data:
+  # caddy-config:
