@@ -39,6 +39,13 @@ const AUTH = { username: COUCHDB_USER, password: COUCHDB_PASSWORD };
 const IGNORED = /(^|[/\\])(\.|_couch|node_modules)/;
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.css', '.js', '.ts', '.html', '.xml', '.csv']);
 
+// Tracks files recently written by CouchDB pull — suppresses chokidar → push loop
+const recentPulls = new Map();
+const PULL_GUARD_MS = 2000;
+
+// Tracks revs we just pushed — suppresses CouchDB changes → pull loop
+const recentPushRevs = new Set();
+
 // Debounce map to avoid rapid-fire writes
 const debounceMap = new Map();
 
@@ -91,7 +98,11 @@ async function upsertDoc(relPath, content) {
       deleted: false,
     };
 
-    await axios.put(`${DB_URL}/${encodeURIComponent(id)}`, doc, { auth: AUTH });
+    const result = await axios.put(`${DB_URL}/${encodeURIComponent(id)}`, doc, { auth: AUTH });
+    if (result.data?.rev) {
+      recentPushRevs.add(result.data.rev);
+      setTimeout(() => recentPushRevs.delete(result.data.rev), 10000);
+    }
     console.log(`[vault-sync] ↑ pushed: ${relPath}`);
   } catch (err) {
     console.error(`[vault-sync] Error pushing ${relPath}:`, err.message);
@@ -119,7 +130,12 @@ async function writeFileFromDoc(doc) {
     const content = doc.datatype === 'base64'
       ? Buffer.from(doc.data || '', 'base64')
       : (doc.data || '');
+
+    // Mark this file as "just pulled" so chokidar ignores the write
+    recentPulls.set(filePath, Date.now());
     await fs.writeFile(filePath, content);
+    setTimeout(() => recentPulls.delete(filePath), PULL_GUARD_MS);
+
     console.log(`[vault-sync] ↓ pulled: ${doc._id}`);
   } catch (err) {
     console.error(`[vault-sync] Error writing ${doc._id}:`, err.message);
@@ -148,6 +164,9 @@ async function watchCouchDBChanges(since = 'now') {
       const { data } = await axios.get(url, { auth: AUTH, timeout: 70000 });
       for (const change of data.results || []) {
         if (change.doc?.deleted) continue;
+        // Skip changes that we pushed ourselves
+        const rev = change.doc?._rev;
+        if (rev && recentPushRevs.has(rev)) continue;
         if (change.doc && !change.id.startsWith('_')) {
           await writeFileFromDoc(change.doc);
         }
@@ -179,10 +198,12 @@ async function main() {
 
   watcher
     .on('add', (p) => debounce(p, async () => {
+      if (recentPulls.has(p)) return; // Skip — this write came from CouchDB pull
       const buf = await fs.readFile(p);
       await upsertDoc(path.relative(VAULT_PATH, p), buf);
     }))
     .on('change', (p) => debounce(p, async () => {
+      if (recentPulls.has(p)) return; // Skip — this write came from CouchDB pull
       const buf = await fs.readFile(p);
       await upsertDoc(path.relative(VAULT_PATH, p), buf);
     }))
