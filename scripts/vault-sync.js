@@ -141,9 +141,10 @@ async function initialPull() {
 }
 
 async function watchCouchDBChanges(since = 'now') {
-  const url = `${BASE_URL}/_changes?feed=longpoll&include_docs=true&since=${since}&timeout=60000`;
   while (true) {
     try {
+      // Rebuild URL each iteration so updated `since` is used
+      const url = `${BASE_URL}/_changes?feed=longpoll&include_docs=true&since=${since}&timeout=60000`;
       const { data } = await axios.get(url, { timeout: 70000 });
       for (const change of data.results || []) {
         if (change.doc?.deleted) continue;
