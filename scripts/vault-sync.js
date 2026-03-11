@@ -16,7 +16,25 @@ const COUCHDB_PASSWORD = process.env.COUCHDB_PASSWORD || '';
 const COUCHDB_HOST = process.env.COUCHDB_HOST || 'localhost:5984';
 const LIVESYNC_DB = process.env.LIVESYNC_DB || 'huginnvault';
 
-const BASE_URL = `http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST}/${LIVESYNC_DB}`;
+// Build authenticated CouchDB URL, auto-detecting HTTPS for Railway public domains.
+// COUCHDB_HOST may optionally include a protocol prefix (http:// or https://).
+function buildCouchUrl(suffix) {
+  const raw = COUCHDB_HOST;
+  let protocol, host;
+  if (raw.startsWith('https://')) {
+    protocol = 'https';
+    host = raw.slice(8).replace(/\/$/, '');
+  } else if (raw.startsWith('http://')) {
+    protocol = 'http';
+    host = raw.slice(7).replace(/\/$/, '');
+  } else {
+    protocol = raw.includes('.up.railway.app') ? 'https' : 'http';
+    host = raw;
+  }
+  return `${protocol}://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${host}${suffix}`;
+}
+
+const BASE_URL = buildCouchUrl(`/${LIVESYNC_DB}`);
 const IGNORED = /(^|[/\\])(\.|_couch|node_modules)/;
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.css', '.js', '.ts', '.html', '.xml', '.csv']);
 
@@ -35,7 +53,7 @@ function isText(filePath) {
 async function waitForCouchDB(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
-      await axios.get(`http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST}/_up`);
+      await axios.get(buildCouchUrl('/_up'));
       console.log('[vault-sync] CouchDB is ready');
       return true;
     } catch {
