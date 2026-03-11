@@ -18,6 +18,7 @@ const LIVESYNC_DB = process.env.LIVESYNC_DB || 'huginnvault';
 
 // Build authenticated CouchDB URL, auto-detecting HTTPS for Railway public domains.
 // COUCHDB_HOST may optionally include a protocol prefix (http:// or https://).
+// Credentials are URL-encoded to handle special characters (^, *, @, etc.).
 function buildCouchUrl(suffix) {
   const raw = COUCHDB_HOST;
   let protocol, host;
@@ -31,7 +32,9 @@ function buildCouchUrl(suffix) {
     protocol = raw.includes('.up.railway.app') ? 'https' : 'http';
     host = raw;
   }
-  return `${protocol}://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${host}${suffix}`;
+  const user = encodeURIComponent(COUCHDB_USER);
+  const pass = encodeURIComponent(COUCHDB_PASSWORD);
+  return `${protocol}://${user}:${pass}@${host}${suffix}`;
 }
 
 const BASE_URL = buildCouchUrl(`/${LIVESYNC_DB}`);
