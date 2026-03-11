@@ -53,3 +53,11 @@ Delete
 - `obsidian-cli delete "path/note"`
 
 Prefer direct edits when appropriate: open the `.md` file and change it; Obsidian will pick it up.
+
+## IMPORTANT: Search-first workflow
+
+**Never create a note without searching first.** Always run:
+1. `obsidian-cli search "topic"` — check note names
+2. `obsidian-cli search-content "key terms"` — check note contents
+
+If a related note exists, **update it** instead of creating a duplicate. Read the existing file with `cat`, modify the content, and write it back. Only use `create` for genuinely new topics.
