@@ -2,7 +2,7 @@
 set -e
 
 # Validate required env vars
-for var in OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN GATEWAY_TOKEN; do
+for var in OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN GATEWAY_TOKEN TAVILY_API_KEY; do
   eval val=\$$var
   if [ -z "$val" ]; then
     echo "ERROR: $var is not set"
