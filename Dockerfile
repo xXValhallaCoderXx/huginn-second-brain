@@ -15,16 +15,14 @@ WORKDIR /app
 # Install openclaw globally (pinned to avoid transient npm registry issues)
 RUN npm install -g openclaw@2026.3.8
 
-# Copy workspace (agent instructions, skills, etc.)
-COPY workspace/ /root/.openclaw/workspace/
+# Copy workspace and config into /app (entrypoint copies to persistent volume on first run)
+COPY workspace/ /app/workspace/
+COPY config/openclaw.json /app/openclaw.json
 
-# Copy server config template
-COPY config/openclaw.json /root/.openclaw/openclaw.json
+# Create vault directory (on persistent volume via entrypoint; /vault is fallback)
+RUN mkdir -p /vault
 
-# Create vault directory
-RUN mkdir -p /vault /root/.openclaw/workspace/memory
-
-# Set default vault path for obsidian-cli
+# Set default vault path for obsidian-cli (entrypoint will update to /data/vault)
 RUN obsidian-cli set-default /vault 2>/dev/null || true
 
 # Copy entrypoint script
@@ -36,6 +34,6 @@ ENV NODE_ENV=production
 EXPOSE 18789
 
 HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
-    CMD curl -f http://localhost:18789/health || exit 1
+    CMD curl -f "http://localhost:${PORT:-18789}/health" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

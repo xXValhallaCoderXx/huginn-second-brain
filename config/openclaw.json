@@ -29,7 +29,7 @@
           "alias": "OpenRouter"
         }
       },
-      "workspace": "/root/.openclaw/workspace",
+      "workspace": "${OPENCLAW_STATE_DIR}/workspace",
       "compaction": {
         "mode": "safeguard"
       },
