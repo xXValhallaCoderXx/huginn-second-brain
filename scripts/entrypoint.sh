@@ -44,6 +44,15 @@ cat > "${OPENCLAW_HOME}/agents/main/agent/auth-profiles.json" <<EOF
 EOF
 
 echo "Entrypoint: OPENCLAW_STATE_DIR=${OPENCLAW_HOME} PORT=${PORT}"
+
+# Start vault-sync daemon in background (only if CouchDB is configured)
+if [ -n "${COUCHDB_HOST}" ]; then
+  echo "Entrypoint: starting vault-sync daemon (CouchDB=${COUCHDB_HOST})..."
+  node /app/scripts/vault-sync.js &
+else
+  echo "Entrypoint: COUCHDB_HOST not set — vault-sync disabled (Obsidian LiveSync won't work)"
+fi
+
 echo "Entrypoint: starting openclaw gateway..."
 
 # Ensure vault is on the persistent volume

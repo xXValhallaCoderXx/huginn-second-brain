@@ -12,12 +12,17 @@ RUN curl -fsSL "https://github.com/Yakitrak/notesmd-cli/releases/download/v${NOT
 
 WORKDIR /app
 
+# Install vault-sync dependencies (axios, chokidar)
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
 # Install openclaw globally (pinned to avoid transient npm registry issues)
 RUN npm install -g openclaw@2026.3.8
 
 # Copy workspace and config into /app (entrypoint copies to persistent volume on first run)
 COPY workspace/ /app/workspace/
 COPY config/openclaw.json /app/openclaw.json
+COPY scripts/ /app/scripts/
 
 # Create vault directory (on persistent volume via entrypoint; /vault is fallback)
 RUN mkdir -p /vault

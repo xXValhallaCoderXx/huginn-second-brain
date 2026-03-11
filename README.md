@@ -141,8 +141,61 @@ docker compose pull && docker compose up -d  # Update
 
 - **Stop your local gateway** before deploying — only one instance can poll Telegram at a time
 - The workspace files (AGENTS.md, skills, etc.) are copied into the container on first start
-- Vault notes are stored in a Docker volume (`vault-data`) — they persist across restarts
-- To sync vault back to your local Obsidian, Phase 2 adds CouchDB + LiveSync
+- Vault notes are stored on a Railway Volume at `/data/vault` — they persist across redeployments
+- Add CouchDB (below) to sync your vault to desktop and mobile Obsidian
+
+## Obsidian LiveSync Setup (Multi-Device Vault Sync)
+
+This connects the Railway vault to your desktop and mobile Obsidian via CouchDB.
+
+### 1. Add CouchDB to Railway
+
+In your Railway project:
+1. Click **+ New Service** → **Docker Image** → enter `couchdb:3`
+2. Set these environment variables on the CouchDB service:
+   - `COUCHDB_USER=admin`
+   - `COUCHDB_PASSWORD=` (pick a strong password)
+3. Note the **internal hostname** Railway assigns (e.g. `couchdb.railway.internal`)
+4. In Railway, go to **Settings → Networking** on the CouchDB service → **Generate Domain** to get a public HTTPS URL (needed for mobile)
+
+### 2. Initialise the CouchDB database
+
+Once CouchDB is deployed, run this once from Railway's shell or locally:
+
+```bash
+COUCH="https://admin:PASSWORD@YOUR-COUCHDB-DOMAIN"
+curl -X PUT "$COUCH/obsidian-livesync"
+curl -X PUT "$COUCH/obsidian-livesync/_security" \
+  -H "Content-Type: application/json" \
+  -d '{"admins":{"names":[],"roles":[]},"members":{"names":[],"roles":[]}}'
+```
+
+### 3. Add CouchDB vars to the openclaw Railway service
+
+In Railway → openclaw service → **Variables**, add:
+
+| Variable | Value |
+|----------|-------|
+| `COUCHDB_HOST` | `couchdb.railway.internal:5984` (internal) |
+| `COUCHDB_USER` | `admin` |
+| `COUCHDB_PASSWORD` | your CouchDB password |
+| `LIVESYNC_DB` | `obsidian-livesync` |
+
+The vault-sync daemon will start automatically on the next deploy.
+
+### 4. Install Self-hosted LiveSync on Obsidian (Desktop + Mobile)
+
+1. Obsidian → **Settings** → **Community Plugins** → Browse → search **"Self-hosted LiveSync"** → Install & Enable
+2. Open the plugin settings → **Setup wizard**
+3. Enter your CouchDB details:
+   - **URI**: `https://YOUR-COUCHDB-DOMAIN` (Railway public URL)
+   - **Username**: `admin`
+   - **Password**: your CouchDB password
+   - **Database name**: `obsidian-livesync`
+4. Click **Test** → **Apply**
+5. Set **Sync mode** to **LiveSync** for real-time sync
+
+Repeat on mobile. All devices + the Railway bot will now share the same vault. ✅
 
 ## Roadmap
 
@@ -153,7 +206,7 @@ docker compose pull && docker compose up -d  # Update
 - [x] Docker deployment + deploy script
 - [x] Caddy reverse proxy (auto-HTTPS)
 - [x] Railway deployment (auto-deploy on merge)
-- [ ] CouchDB + LiveSync (multi-device vault sync)
+- [x] CouchDB + LiveSync (multi-device vault sync)
 - [ ] Backup/restore scripts
 
 ## Railway Deployment (Recommended)
