@@ -1,6 +1,11 @@
-# Docker Compose for Huginn Second Brain (VPS Deployment)
-# Local testing: run `npx openclaw` directly (no Docker needed)
+# Docker Compose for Huginn Second Brain
+# Local testing: run `npx openclaw gateway start` directly (no Docker needed)
 # VPS deployment: `docker compose up -d`
+#
+# Quick start:
+#   1. cp .env.example .env && edit .env (fill in API keys)
+#   2. docker compose up -d
+#   3. docker compose logs -f openclaw
 
 services:
   openclaw:
@@ -10,11 +15,11 @@ services:
     working_dir: /app
     command: >
       sh -c "npm install -g openclaw@latest &&
-             mkdir -p /root/.openclaw/workspace/memory /root/.openclaw/workspace/skills &&
-             openclaw"
+             cp -rn /app/workspace/* /root/.openclaw/workspace/ 2>/dev/null || true &&
+             openclaw gateway --port 18789"
     volumes:
-      - ./config/openclaw.json:/root/.openclaw/openclaw.json:ro
-      - openclaw-workspace:/root/.openclaw/workspace
+      - ./config/openclaw.json:/root/.openclaw/openclaw.json
+      - ./workspace:/app/workspace:ro
       - openclaw-state:/root/.openclaw
       - vault-data:/vault
     ports:
@@ -23,12 +28,40 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  # CouchDB for Obsidian LiveSync (Phase 2 — uncomment when ready)
+  # Caddy reverse proxy — auto-HTTPS with Let's Encrypt
+  # Set DOMAIN in .env, then: docker compose --profile proxy up -d
+  caddy:
+    image: caddy:2-alpine
+    container_name: huginn-caddy
+    restart: unless-stopped
+    profiles: ["proxy"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-huginn.yourdomain.com}
+    depends_on:
+      openclaw:
+        condition: service_healthy
+
+  # CouchDB for Obsidian LiveSync (Phase 2)
+  # docker compose --profile sync up -d
   # couchdb:
   #   image: couchdb:3
   #   container_name: huginn-couchdb
   #   restart: unless-stopped
+  #   profiles: ["sync"]
   #   volumes:
   #     - couchdb-data:/opt/couchdb/data
   #   environment:
@@ -37,23 +70,9 @@ services:
   #   ports:
   #     - "127.0.0.1:5984:5984"
 
-  # Caddy reverse proxy (Phase 2 — uncomment when ready)
-  # caddy:
-  #   image: caddy:2-alpine
-  #   container_name: huginn-caddy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
-  #     - caddy-data:/data
-  #     - caddy-config:/config
-
 volumes:
-  openclaw-workspace:
   openclaw-state:
   vault-data:
+  caddy-data:
+  caddy-config:
   # couchdb-data:
-  # caddy-data:
-  # caddy-config:

@@ -69,25 +69,80 @@ Send a message to your bot — Huginn will respond using Claude Sonnet 4.5 for c
 ## Project Structure
 
 ```
-├── workspace/                # OpenClaw agent workspace (AGENTS.md, SOUL.md, skills/, memory/)
-│   ├── AGENTS.md             # Agent operating instructions + vault workflows
+├── workspace/                # OpenClaw agent workspace
+│   ├── AGENTS.md             # Agent instructions + vault workflows
 │   ├── SOUL.md               # Agent persona and tone
-│   ├── USER.md               # Info about you (filled in by the agent)
+│   ├── USER.md               # Info about you
 │   ├── HEARTBEAT.md          # Periodic check instructions
-│   ├── MEMORY.md             # Long-term curated memory (gitignored)
-│   ├── memory/               # Daily memory logs (gitignored)
-│   └── skills/               # Installed skills (obsidian, tavily-search)
-├── docker-compose.yml        # VPS deployment (OpenClaw + future CouchDB/Caddy)
+│   ├── MEMORY.md             # Long-term memory (gitignored)
+│   ├── memory/               # Daily logs (gitignored)
+│   └── skills/               # Skills (obsidian, tavily-search)
+├── config/                   # Deployment config
+│   ├── openclaw.json         # Server config (env vars for secrets)
+│   └── Caddyfile             # Reverse proxy config
+├── scripts/
+│   └── deploy.sh             # One-command VPS deploy
+├── docker-compose.yml        # Docker deployment
 ├── .env.example              # Environment variable template
-├── package.json              # Node dependencies (openclaw)
-└── README.md                 # This file
+├── package.json              # Node dependencies
+└── README.md
 ```
 
 ## Configuration
 
-- **OpenClaw config**: `~/.openclaw/openclaw.json` (points workspace here)
-- **API keys**: `~/.openclaw/.env`
+- **OpenClaw config**: `~/.openclaw/openclaw.json` (local) or `config/openclaw.json` (deployment)
+- **API keys**: `~/.openclaw/.env` (local) or `.env` (deployment)
 - **Workspace**: `./workspace/` (this repo)
+
+## VPS Deployment
+
+### Prerequisites
+
+- A Linux VPS with Docker + Docker Compose
+- A domain name (optional, for HTTPS)
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/YOUR_USER/huginn-second-brain.git
+cd huginn-second-brain
+cp .env.example .env
+```
+
+Edit `.env` and fill in your keys:
+```bash
+OPENROUTER_API_KEY=sk-or-...
+TAVILY_API_KEY=tvly-...
+TELEGRAM_BOT_TOKEN=1234567890:ABC...
+GATEWAY_TOKEN=$(openssl rand -hex 24)
+```
+
+### 2. Deploy
+
+```bash
+# Without HTTPS (bot-only, Telegram handles transport security)
+./scripts/deploy.sh
+
+# With HTTPS reverse proxy (set DOMAIN in .env first)
+./scripts/deploy.sh --with-proxy
+```
+
+### 3. Manage
+
+```bash
+docker compose logs -f openclaw    # Tail logs
+docker compose ps                  # Status
+docker compose restart openclaw    # Restart
+docker compose down                # Stop
+docker compose pull && docker compose up -d  # Update
+```
+
+### Important notes
+
+- **Stop your local gateway** before deploying — only one instance can poll Telegram at a time
+- The workspace files (AGENTS.md, skills, etc.) are copied into the container on first start
+- Vault notes are stored in a Docker volume (`vault-data`) — they persist across restarts
+- To sync vault back to your local Obsidian, Phase 2 adds CouchDB + LiveSync
 
 ## Roadmap
 
@@ -95,6 +150,7 @@ Send a message to your bot — Huginn will respond using Claude Sonnet 4.5 for c
 - [x] Multi-model routing (OpenRouter)
 - [x] Obsidian vault integration (obsidian-cli)
 - [x] Web research (Tavily + built-in web_search)
-- [ ] CouchDB + LiveSync (multi-device sync)
-- [ ] Caddy reverse proxy (SSL)
-- [ ] VPS deployment automation
+- [x] Docker deployment + deploy script
+- [x] Caddy reverse proxy (auto-HTTPS)
+- [ ] CouchDB + LiveSync (multi-device vault sync)
+- [ ] Backup/restore scripts

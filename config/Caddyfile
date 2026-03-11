@@ -1,0 +1,17 @@
+# Replace huginn.yourdomain.com with your actual domain
+{$DOMAIN:huginn.yourdomain.com} {
+	# OpenClaw Gateway (WebSocket + HTTP)
+	reverse_proxy openclaw:18789
+
+	# Security headers
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# CouchDB for Obsidian LiveSync (Phase 2 — uncomment when ready)
+# {$COUCHDB_DOMAIN:sync.yourdomain.com} {
+# 	reverse_proxy couchdb:5984
+# }
