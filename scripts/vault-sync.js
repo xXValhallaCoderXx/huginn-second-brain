@@ -14,7 +14,7 @@ const VAULT_PATH = process.env.VAULT_PATH || '/data/vault';
 const COUCHDB_USER = process.env.COUCHDB_USER || 'admin';
 const COUCHDB_PASSWORD = process.env.COUCHDB_PASSWORD || '';
 const COUCHDB_HOST = process.env.COUCHDB_HOST || 'localhost:5984';
-const LIVESYNC_DB = process.env.LIVESYNC_DB || 'huginnvault';
+const LIVESYNC_DB = process.env.LIVESYNC_DB || 'hugginvault';
 
 // Build base CouchDB URL (no credentials — auth via axios config).
 function buildBaseUrl() {
