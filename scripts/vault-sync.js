@@ -157,6 +157,43 @@ async function initialPull() {
   }
 }
 
+async function scanDir(dir) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (IGNORED.test(entry.name)) continue;
+    if (entry.isDirectory()) {
+      files.push(...await scanDir(full));
+    } else {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+async function initialPush() {
+  console.log('[vault-sync] Initial push — checking for local files missing from CouchDB...');
+  try {
+    const { data } = await axios.get(`${DB_URL}/_all_docs`, { auth: AUTH });
+    const remoteIds = new Set(data.rows.map(r => r.id));
+    const localFiles = await scanDir(VAULT_PATH);
+    let pushed = 0;
+    for (const filePath of localFiles) {
+      const relPath = path.relative(VAULT_PATH, filePath);
+      const id = relPath.replace(/\\/g, '/');
+      if (!remoteIds.has(id)) {
+        const buf = await fs.readFile(filePath);
+        await upsertDoc(relPath, buf);
+        pushed++;
+      }
+    }
+    console.log(`[vault-sync] Initial push complete (${pushed} new files pushed)`);
+  } catch (err) {
+    console.error('[vault-sync] Initial push failed:', err.message);
+  }
+}
+
 async function watchCouchDBChanges(since = 'now') {
   while (true) {
     try {
@@ -192,6 +229,7 @@ async function main() {
 
   await fs.mkdir(VAULT_PATH, { recursive: true });
   await initialPull();
+  await initialPush();
 
   // Watch filesystem → push to CouchDB
   const watcher = chokidar.watch(VAULT_PATH, { ignored: IGNORED, persistent: true, ignoreInitial: true });
