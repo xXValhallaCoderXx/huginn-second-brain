@@ -14,7 +14,7 @@ const VAULT_PATH = process.env.VAULT_PATH || '/data/vault';
 const COUCHDB_USER = process.env.COUCHDB_USER || 'admin';
 const COUCHDB_PASSWORD = process.env.COUCHDB_PASSWORD || '';
 const COUCHDB_HOST = process.env.COUCHDB_HOST || 'localhost:5984';
-const LIVESYNC_DB = process.env.LIVESYNC_DB || 'obsidian-livesync';
+const LIVESYNC_DB = process.env.LIVESYNC_DB || 'huginnvault';
 
 const BASE_URL = `http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@${COUCHDB_HOST}/${LIVESYNC_DB}`;
 const IGNORED = /(^|[/\\])(\.|_couch|node_modules)/;

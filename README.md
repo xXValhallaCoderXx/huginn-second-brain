@@ -164,8 +164,8 @@ Once CouchDB is deployed, run this once from Railway's shell or locally:
 
 ```bash
 COUCH="https://admin:PASSWORD@YOUR-COUCHDB-DOMAIN"
-curl -X PUT "$COUCH/obsidian-livesync"
-curl -X PUT "$COUCH/obsidian-livesync/_security" \
+curl -X PUT "$COUCH/huginnvault"
+curl -X PUT "$COUCH/huginnvault/_security" \
   -H "Content-Type: application/json" \
   -d '{"admins":{"names":[],"roles":[]},"members":{"names":[],"roles":[]}}'
 ```
@@ -179,7 +179,7 @@ In Railway → openclaw service → **Variables**, add:
 | `COUCHDB_HOST` | `couchdb.railway.internal:5984` (internal) |
 | `COUCHDB_USER` | `admin` |
 | `COUCHDB_PASSWORD` | your CouchDB password |
-| `LIVESYNC_DB` | `obsidian-livesync` |
+| `LIVESYNC_DB` | `huginnvault` |
 
 The vault-sync daemon will start automatically on the next deploy.
 
@@ -191,7 +191,7 @@ The vault-sync daemon will start automatically on the next deploy.
    - **URI**: `https://YOUR-COUCHDB-DOMAIN` (Railway public URL)
    - **Username**: `admin`
    - **Password**: your CouchDB password
-   - **Database name**: `obsidian-livesync`
+   - **Database name**: `huginnvault`
 4. Click **Test** → **Apply**
 5. Set **Sync mode** to **LiveSync** for real-time sync
 

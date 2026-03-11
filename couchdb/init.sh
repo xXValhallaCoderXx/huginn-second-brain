@@ -3,7 +3,7 @@
 set -e
 
 COUCHDB_URL="http://${COUCHDB_USER:-admin}:${COUCHDB_PASSWORD}@localhost:5984"
-DB_NAME="${LIVESYNC_DB:-obsidian-livesync}"
+DB_NAME="${LIVESYNC_DB:-huginnvault}"
 
 echo "Waiting for CouchDB to start..."
 until curl -sf "${COUCHDB_URL}/_up" > /dev/null 2>&1; do
