@@ -27,11 +27,15 @@ RUN mkdir -p /vault /root/.openclaw/workspace/memory
 # Set default vault path for obsidian-cli
 RUN obsidian-cli set-default /vault 2>/dev/null || true
 
+# Copy entrypoint script
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 ENV NODE_ENV=production
 
 EXPOSE 18789
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:18789/health || exit 1
 
-CMD ["openclaw", "gateway", "--port", "18789"]
+ENTRYPOINT ["/entrypoint.sh"]
