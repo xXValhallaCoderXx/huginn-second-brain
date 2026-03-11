@@ -16,10 +16,8 @@ const COUCHDB_PASSWORD = process.env.COUCHDB_PASSWORD || '';
 const COUCHDB_HOST = process.env.COUCHDB_HOST || 'localhost:5984';
 const LIVESYNC_DB = process.env.LIVESYNC_DB || 'huginnvault';
 
-// Build authenticated CouchDB URL, auto-detecting HTTPS for Railway public domains.
-// COUCHDB_HOST may optionally include a protocol prefix (http:// or https://).
-// Credentials are URL-encoded to handle special characters (^, *, @, etc.).
-function buildCouchUrl(suffix) {
+// Build base CouchDB URL (no credentials — auth via axios config).
+function buildBaseUrl() {
   const raw = COUCHDB_HOST;
   let protocol, host;
   if (raw.startsWith('https://')) {
@@ -32,12 +30,12 @@ function buildCouchUrl(suffix) {
     protocol = raw.includes('.up.railway.app') ? 'https' : 'http';
     host = raw;
   }
-  const user = encodeURIComponent(COUCHDB_USER);
-  const pass = encodeURIComponent(COUCHDB_PASSWORD);
-  return `${protocol}://${user}:${pass}@${host}${suffix}`;
+  return `${protocol}://${host}`;
 }
 
-const BASE_URL = buildCouchUrl(`/${LIVESYNC_DB}`);
+const SERVER_URL = buildBaseUrl();
+const DB_URL = `${SERVER_URL}/${LIVESYNC_DB}`;
+const AUTH = { username: COUCHDB_USER, password: COUCHDB_PASSWORD };
 const IGNORED = /(^|[/\\])(\.|_couch|node_modules)/;
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.css', '.js', '.ts', '.html', '.xml', '.csv']);
 
@@ -56,11 +54,11 @@ function isText(filePath) {
 async function waitForCouchDB(retries = 30) {
   for (let i = 0; i < retries; i++) {
     try {
-      await axios.get(buildCouchUrl('/_up'));
+      await axios.get(`${SERVER_URL}/_up`, { auth: AUTH });
       console.log('[vault-sync] CouchDB is ready');
       return true;
-    } catch {
-      console.log(`[vault-sync] Waiting for CouchDB... (${i + 1}/${retries})`);
+    } catch (err) {
+      console.log(`[vault-sync] Waiting for CouchDB... (${i + 1}/${retries}) — ${err.message}`);
       await new Promise(r => setTimeout(r, 3000));
     }
   }
@@ -73,7 +71,7 @@ async function upsertDoc(relPath, content) {
   try {
     let rev;
     try {
-      const { data } = await axios.get(`${BASE_URL}/${encodeURIComponent(id)}`);
+      const { data } = await axios.get(`${DB_URL}/${encodeURIComponent(id)}`, { auth: AUTH });
       rev = data._rev;
     } catch (e) {
       if (e.response?.status !== 404) throw e;
@@ -93,7 +91,7 @@ async function upsertDoc(relPath, content) {
       deleted: false,
     };
 
-    await axios.put(`${BASE_URL}/${encodeURIComponent(id)}`, doc);
+    await axios.put(`${DB_URL}/${encodeURIComponent(id)}`, doc, { auth: AUTH });
     console.log(`[vault-sync] ↑ pushed: ${relPath}`);
   } catch (err) {
     console.error(`[vault-sync] Error pushing ${relPath}:`, err.message);
@@ -103,8 +101,8 @@ async function upsertDoc(relPath, content) {
 async function deleteDoc(relPath) {
   const id = relPath.replace(/\\/g, '/');
   try {
-    const { data } = await axios.get(`${BASE_URL}/${encodeURIComponent(id)}`);
-    await axios.put(`${BASE_URL}/${encodeURIComponent(id)}`, { ...data, deleted: true });
+    const { data } = await axios.get(`${DB_URL}/${encodeURIComponent(id)}`, { auth: AUTH });
+    await axios.put(`${DB_URL}/${encodeURIComponent(id)}`, { ...data, deleted: true }, { auth: AUTH });
     console.log(`[vault-sync] ✗ deleted: ${relPath}`);
   } catch (err) {
     if (err.response?.status !== 404) {
@@ -131,7 +129,7 @@ async function writeFileFromDoc(doc) {
 async function initialPull() {
   console.log('[vault-sync] Initial pull from CouchDB...');
   try {
-    const { data } = await axios.get(`${BASE_URL}/_all_docs?include_docs=true`);
+    const { data } = await axios.get(`${DB_URL}/_all_docs?include_docs=true`, { auth: AUTH });
     for (const row of data.rows || []) {
       const doc = row.doc;
       if (!doc || doc.deleted || doc._id.startsWith('_')) continue;
@@ -146,9 +144,8 @@ async function initialPull() {
 async function watchCouchDBChanges(since = 'now') {
   while (true) {
     try {
-      // Rebuild URL each iteration so updated `since` is used
-      const url = `${BASE_URL}/_changes?feed=longpoll&include_docs=true&since=${since}&timeout=60000`;
-      const { data } = await axios.get(url, { timeout: 70000 });
+      const url = `${DB_URL}/_changes?feed=longpoll&include_docs=true&since=${since}&timeout=60000`;
+      const { data } = await axios.get(url, { auth: AUTH, timeout: 70000 });
       for (const change of data.results || []) {
         if (change.doc?.deleted) continue;
         if (change.doc && !change.id.startsWith('_')) {
