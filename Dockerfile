@@ -12,8 +12,8 @@ RUN curl -fsSL "https://github.com/Yakitrak/notesmd-cli/releases/download/v${NOT
 
 WORKDIR /app
 
-# Install openclaw globally
-RUN npm install -g openclaw@latest
+# Install openclaw globally (pinned to avoid transient npm registry issues)
+RUN npm install -g openclaw@2026.3.8
 
 # Copy workspace (agent instructions, skills, etc.)
 COPY workspace/ /root/.openclaw/workspace/
