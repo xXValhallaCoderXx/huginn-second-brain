@@ -37,13 +37,18 @@ Pick a default vault (once):
 - `obsidian-cli print-default` / `obsidian-cli print-default --path-only`
 
 Search
-- `obsidian-cli search "query"` (note names)
-- `obsidian-cli search-content "query"` (inside notes; shows snippets + lines)
+- `obsidian-cli search-content “query” --no-interactive` (search inside notes; shows snippets + lines)
+- `obsidian-cli list | grep -i “query”` (search note names)
+- `obsidian-cli search` (interactive fuzzy finder — **only works in a terminal**, NOT in scripts/automation)
 
-Create
-- `obsidian-cli create "Folder/New note" --content "..." --open`
-- Requires Obsidian URI handler (`obsidian://…`) working (Obsidian installed).
-- Avoid creating notes under “hidden” dot-folders (e.g. `.something/...`) via URI; Obsidian may refuse.
+Create / Append / Overwrite
+- `obsidian-cli create “Folder/New note” --content “...”` — create new note
+- `obsidian-cli create “Folder/Existing note” --content “...” --append` — append to existing note
+- `obsidian-cli create “Folder/Existing note” --content “...” --overwrite` — replace note contents
+- `obsidian-cli create “Folder/Note” --open` — create and open in Obsidian (requires Obsidian desktop)
+
+Read
+- `obsidian-cli print “Folder/Note”` — print note contents to stdout
 
 Move/rename (safe refactor)
 - `obsidian-cli move "old/path/note" "new/path/note"`
@@ -57,7 +62,7 @@ Prefer direct edits when appropriate: open the `.md` file and change it; Obsidia
 ## IMPORTANT: Search-first workflow
 
 **Never create a note without searching first.** Always run:
-1. `obsidian-cli search "topic"` — check note names
-2. `obsidian-cli search-content "key terms"` — check note contents
+1. `obsidian-cli search-content "key terms" --no-interactive` — check note contents
+2. `obsidian-cli list | grep -i "topic"` — check note names
 
-If a related note exists, **update it** instead of creating a duplicate. Read the existing file with `cat`, modify the content, and write it back. Only use `create` for genuinely new topics.
+If a related note exists, **update it** instead of creating a duplicate. Read with `obsidian-cli print "note"`, then use `--append` or `--overwrite` to write changes. Only use `create` (without flags) for genuinely new topics.
