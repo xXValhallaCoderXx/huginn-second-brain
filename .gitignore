@@ -8,3 +8,5 @@ workspace/memory/*.md
 workspace/MEMORY.md
 workspace/IDENTITY.md
 workspace/.openclaw/
+
+.debug-context
