@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# vault-healthcheck.sh — verify obsidian-cli + vault-sync are working correctly
-# Run inside the container or locally to diagnose write inconsistencies.
+# vault-healthcheck.sh — verify obsidian-cli + Syncthing are working correctly
+# Run inside the container or locally to diagnose sync or write issues.
 
 set -uo pipefail
 
@@ -231,41 +231,21 @@ else
   warn "Some content was mangled by shell expansion ($ESCAPE_ISSUES issues)"
 fi
 
-# ── 11. CouchDB / vault-sync ──
-section "CouchDB (vault-sync)"
+# ── 11. Syncthing ──
+section "Syncthing (vault sync)"
 
-if [ -n "${COUCHDB_HOST:-}" ]; then
-  DB_URL="${COUCHDB_HOST}"
-  # Normalize URL
-  case "$DB_URL" in
-    http://*|https://*) ;;
-    *) DB_URL="http://$DB_URL" ;;
-  esac
-
-  COUCH_UP=$(curl -sf -u "${COUCHDB_USER:-admin}:${COUCHDB_PASSWORD:-}" "$DB_URL/_up" 2>&1)
-  if [ $? -eq 0 ]; then
-    pass "CouchDB reachable at $DB_URL"
-  else
-    fail "CouchDB unreachable: $COUCH_UP"
-  fi
-
-  LIVESYNC_DB="${LIVESYNC_DB:-hugginvault}"
-  DB_INFO=$(curl -sf -u "${COUCHDB_USER:-admin}:${COUCHDB_PASSWORD:-}" "$DB_URL/$LIVESYNC_DB" 2>&1)
-  if [ $? -eq 0 ]; then
-    DOC_COUNT=$(echo "$DB_INFO" | grep -o '"doc_count":[0-9]*' | cut -d: -f2)
-    pass "Database '$LIVESYNC_DB' exists (${DOC_COUNT:-?} docs)"
-  else
-    fail "Database '$LIVESYNC_DB' not found or inaccessible"
-  fi
-
-  # Check if vault-sync process is running
-  if pgrep -f "vault-sync.js" >/dev/null 2>&1; then
-    pass "vault-sync.js process is running"
-  else
-    warn "vault-sync.js not running — changes won't reach Obsidian via LiveSync"
-  fi
+if pgrep -f "syncthing" >/dev/null 2>&1; then
+  pass "Syncthing process is running"
 else
-  warn "COUCHDB_HOST not set — skipping CouchDB checks"
+  fail "Syncthing process not running -- vault sync is disabled"
+fi
+
+ST_GUI="http://localhost:8384"
+ST_STATUS=$(curl -sf "$ST_GUI/rest/noauth/health" 2>&1)
+if [ $? -eq 0 ]; then
+  pass "Syncthing GUI responding at $ST_GUI"
+else
+  warn "Syncthing GUI not responding (may still be starting)"
 fi
 
 # ── Summary ──

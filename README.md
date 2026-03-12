@@ -81,7 +81,9 @@ Send a message to your bot — Huginn will respond using Claude Sonnet 4.5 for c
 │   ├── openclaw.json         # Server config (env vars for secrets)
 │   └── Caddyfile             # Reverse proxy config
 ├── scripts/
-│   └── deploy.sh             # One-command VPS deploy
+│   ├── deploy.sh             # One-command VPS deploy
+│   ├── syncthing-setup.sh    # Syncthing bootstrap (first run)
+│   └── vault-healthcheck.sh  # Vault + sync health checks
 ├── docker-compose.yml        # Docker deployment
 ├── .env.example              # Environment variable template
 ├── package.json              # Node dependencies
@@ -142,60 +144,61 @@ docker compose pull && docker compose up -d  # Update
 - **Stop your local gateway** before deploying — only one instance can poll Telegram at a time
 - The workspace files (AGENTS.md, skills, etc.) are copied into the container on first start
 - Vault notes are stored on a Railway Volume at `/data/vault` — they persist across redeployments
-- Add CouchDB (below) to sync your vault to desktop and mobile Obsidian
+- Add Syncthing (below) to sync your vault to desktop and mobile Obsidian
 
-## Obsidian LiveSync Setup (Multi-Device Vault Sync)
+## Syncthing Setup (Multi-Device Vault Sync)
 
-This connects the Railway vault to your desktop and mobile Obsidian via CouchDB.
+Syncthing syncs the vault folder directly between the Railway server and your devices. No database translation layer — Obsidian just reads plain files.
 
-### 1. Add CouchDB to Railway
+### 1. Set Syncthing env vars on Railway
 
-In your Railway project:
-1. Click **+ New Service** → **Docker Image** → enter `couchdb:3`
-2. Set these environment variables on the CouchDB service:
-   - `COUCHDB_USER=admin`
-   - `COUCHDB_PASSWORD=` (pick a strong password)
-3. Note the **internal hostname** Railway assigns (e.g. `couchdb.railway.internal`)
-4. In Railway, go to **Settings → Networking** on the CouchDB service → **Generate Domain** to get a public HTTPS URL (needed for mobile)
-
-### 2. Initialise the CouchDB database
-
-Once CouchDB is deployed, run this once from Railway's shell or locally:
-
-```bash
-COUCH="https://admin:PASSWORD@YOUR-COUCHDB-DOMAIN"
-curl -X PUT "$COUCH/hugginvault"
-curl -X PUT "$COUCH/hugginvault/_security" \
-  -H "Content-Type: application/json" \
-  -d '{"admins":{"names":[],"roles":[]},"members":{"names":[],"roles":[]}}'
-```
-
-### 3. Add CouchDB vars to the openclaw Railway service
-
-In Railway → openclaw service → **Variables**, add:
+In Railway → your service → **Variables**, add:
 
 | Variable | Value |
 |----------|-------|
-| `COUCHDB_HOST` | `couchdb.railway.internal:5984` (internal) |
-| `COUCHDB_USER` | `admin` |
-| `COUCHDB_PASSWORD` | your CouchDB password |
-| `LIVESYNC_DB` | `hugginvault` |
+| `SYNCTHING_GUI_USER` | `admin` |
+| `SYNCTHING_GUI_PASSWORD` | (pick a strong password) |
 
-The vault-sync daemon will start automatically on the next deploy.
+Syncthing bootstraps automatically on first deploy.
 
-### 4. Install Self-hosted LiveSync on Obsidian (Desktop + Mobile)
+### 2. Expose Syncthing ports on Railway
 
-1. Obsidian → **Settings** → **Community Plugins** → Browse → search **"Self-hosted LiveSync"** → Install & Enable
-2. Open the plugin settings → **Setup wizard**
-3. Enter your CouchDB details:
-   - **URI**: `https://YOUR-COUCHDB-DOMAIN` (Railway public URL)
-   - **Username**: `admin`
-   - **Password**: your CouchDB password
-   - **Database name**: `hugginvault`
-4. Click **Test** → **Apply**
-5. Set **Sync mode** to **LiveSync** for real-time sync
+In Railway → your service → **Settings → Networking**:
+1. **Generate Domain** for port `8384` (Syncthing web GUI — needed for initial setup)
+2. **Add TCP Proxy** for port `22000` (BEP sync protocol — needed for actual file sync)
 
-Repeat on mobile. All devices + the Railway bot will now share the same vault. ✅
+### 3. Get the server's Device ID
+
+Open the Syncthing GUI at `https://YOUR-RAILWAY-DOMAIN:8384`, log in, and note the **Device ID** shown under **Actions → Show ID**.
+
+### 4. Install Syncthing on your devices
+
+- **Desktop**: Install from [syncthing.net](https://syncthing.net/downloads/) or your package manager
+- **Android**: Install [Syncthing-Fork](https://f-droid.org/packages/com.github.catfriend1.syncthingandroid/) from F-Droid
+- **iOS**: Install [Möbius Sync](https://apps.apple.com/app/m%C3%B6bius-sync/id1539203216)
+
+### 5. Pair devices
+
+On each client device:
+1. Open Syncthing → **Add Remote Device** → paste the server's Device ID
+2. On the server GUI, **accept** the incoming device request
+3. **Share** the `huginn-vault` folder with the new device
+4. On the client, set the folder path to your Obsidian vault location
+
+### 6. Open in Obsidian
+
+Point Obsidian at the synced folder. No plugins needed — Syncthing handles sync at the OS level.
+
+### Notes
+
+- **Conflict handling**: If two devices edit the same file simultaneously, Syncthing creates `.sync-conflict-*` files. Review and resolve manually.
+- **Ignore patterns**: Consider adding a `.stignore` file in your vault to skip noisy files:
+  ```
+  .obsidian/workspace.json
+  .obsidian/workspace-mobile.json
+  .obsidian/cache
+  .trash/
+  ```
 
 ## Roadmap
 
@@ -206,7 +209,7 @@ Repeat on mobile. All devices + the Railway bot will now share the same vault. �
 - [x] Docker deployment + deploy script
 - [x] Caddy reverse proxy (auto-HTTPS)
 - [x] Railway deployment (auto-deploy on merge)
-- [x] CouchDB + LiveSync (multi-device vault sync)
+- [x] Syncthing (multi-device vault sync, replaces CouchDB/LiveSync)
 - [ ] Backup/restore scripts
 
 ## Railway Deployment (Recommended)

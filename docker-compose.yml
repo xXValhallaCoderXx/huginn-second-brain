@@ -23,11 +23,17 @@ services:
       - openclaw-state:/root/.openclaw
       - vault-data:/vault
     ports:
-      - "127.0.0.1:18789:18789"
+      - "127.0.0.1:18789:18789"  # OpenClaw gateway
+      - "127.0.0.1:8384:8384"    # Syncthing web GUI
+      - "22000:22000/tcp"         # Syncthing BEP sync protocol
+      - "22000:22000/udp"         # Syncthing QUIC
+      - "21027:21027/udp"         # Syncthing local discovery
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      - SYNCTHING_GUI_USER=${SYNCTHING_GUI_USER:-admin}
+      - SYNCTHING_GUI_PASSWORD=${SYNCTHING_GUI_PASSWORD:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
@@ -55,24 +61,8 @@ services:
       openclaw:
         condition: service_healthy
 
-  # CouchDB for Obsidian LiveSync
-  # docker compose --profile sync up -d couchdb
-  couchdb:
-    image: couchdb:3
-    container_name: huginn-couchdb
-    restart: unless-stopped
-    profiles: ["sync"]
-    volumes:
-      - couchdb-data:/opt/couchdb/data
-    environment:
-      - COUCHDB_USER=${COUCHDB_USER:-admin}
-      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-password}
-    ports:
-      - "127.0.0.1:5984:5984"
-
 volumes:
   openclaw-state:
   vault-data:
   caddy-data:
   caddy-config:
-  couchdb-data:

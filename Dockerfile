@@ -10,11 +10,12 @@ RUN curl -fsSL "https://github.com/Yakitrak/notesmd-cli/releases/download/v${NOT
     | tar -xz -C /usr/local/bin notesmd-cli && \
     ln -s /usr/local/bin/notesmd-cli /usr/local/bin/obsidian-cli
 
-WORKDIR /app
+# Install Syncthing
+ARG SYNCTHING_VERSION=1.28.1
+RUN curl -fsSL "https://github.com/syncthing/syncthing/releases/download/v${SYNCTHING_VERSION}/syncthing-linux-amd64-v${SYNCTHING_VERSION}.tar.gz" \
+    | tar -xz --strip-components=1 -C /usr/local/bin syncthing-linux-amd64-v${SYNCTHING_VERSION}/syncthing
 
-# Install vault-sync dependencies (axios, chokidar)
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+WORKDIR /app
 
 # Install openclaw globally (pinned to avoid transient npm registry issues)
 RUN npm install -g openclaw@2026.3.8
@@ -36,7 +37,8 @@ RUN chmod +x /entrypoint.sh
 
 ENV NODE_ENV=production
 
-EXPOSE 18789
+# OpenClaw gateway + Syncthing GUI + Syncthing BEP sync protocol
+EXPOSE 18789 8384 22000
 
 HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
     CMD curl -f "http://localhost:${PORT:-18789}/health" || exit 1

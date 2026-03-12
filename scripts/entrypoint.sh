@@ -45,13 +45,23 @@ EOF
 
 echo "Entrypoint: OPENCLAW_STATE_DIR=${OPENCLAW_HOME} PORT=${PORT}"
 
-# Start vault-sync daemon in background (only if CouchDB is configured)
-if [ -n "${COUCHDB_HOST}" ]; then
-  echo "Entrypoint: starting vault-sync daemon (CouchDB=${COUCHDB_HOST})..."
-  node /app/scripts/vault-sync.js &
-else
-  echo "Entrypoint: COUCHDB_HOST not set — vault-sync disabled (Obsidian LiveSync won't work)"
+# Bootstrap Syncthing config on first run
+SYNCTHING_HOME="${DATA_DIR}/syncthing"
+export SYNCTHING_HOME
+export VAULT_PATH="${DATA_DIR}/vault"
+if [ ! -f "${SYNCTHING_HOME}/config.xml" ]; then
+  echo "Entrypoint: first run — bootstrapping Syncthing config..."
+  /app/scripts/syncthing-setup.sh
 fi
+
+# Start Syncthing daemon in background (vault sync via BEP protocol)
+echo "Entrypoint: starting Syncthing daemon..."
+syncthing serve \
+  --home="${SYNCTHING_HOME}" \
+  --no-browser \
+  --no-default-folder \
+  --log-max-old-files=0 \
+  --log-max-size=5242880 &
 
 echo "Entrypoint: starting openclaw gateway..."
 

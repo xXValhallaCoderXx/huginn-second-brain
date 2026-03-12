@@ -11,7 +11,7 @@
 	}
 }
 
-# CouchDB for Obsidian LiveSync (Phase 2 — uncomment when ready)
-# {$COUCHDB_DOMAIN:sync.yourdomain.com} {
-# 	reverse_proxy couchdb:5984
+# Syncthing web GUI (uncomment and set domain to expose externally)
+# {$SYNCTHING_DOMAIN:sync.yourdomain.com} {
+# 	reverse_proxy openclaw:8384
 # }
