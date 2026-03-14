@@ -20,12 +20,12 @@ cp .env.example .env
 
 Edit `.env` and fill in:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key — used for both the main model (Claude Sonnet) and observational memory (Gemini Flash) |
-| `TELEGRAM_BOT_TOKEN` | **Yes** | Bot token from @BotFather on Telegram |
-| `TELEGRAM_WEBHOOK_URL` | No | Public webhook URL for production (e.g. `https://<app>.up.railway.app/telegram/webhook`). Leave unset for local dev |
-| `LIBSQL_URL` | No | libSQL connection URL. Defaults to `file:./mastra.db` (local SQLite file) |
+| Variable               | Required | Description                                                                                                         |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`   | **Yes**  | Your OpenRouter API key — used for both the main model (Claude Sonnet) and observational memory (Gemini Flash)      |
+| `TELEGRAM_BOT_TOKEN`   | **Yes**  | Bot token from @BotFather on Telegram                                                                               |
+| `TELEGRAM_WEBHOOK_URL` | No       | Public webhook URL for production (e.g. `https://<app>.up.railway.app/telegram/webhook`). Leave unset for local dev |
+| `LIBSQL_URL`           | No       | libSQL connection URL. Defaults to `file:./mastra.db` (local SQLite file)                                           |
 
 ## 3. Run locally
 
@@ -86,5 +86,6 @@ src/
 ## Cost Notes
 
 Each message involves:
+
 - **1 Claude Sonnet call** via OpenRouter (main response)
 - **Occasional Gemini Flash call** for observational memory processing (~$0.15/1M tokens)
