@@ -1,10 +1,12 @@
 {
   "name": "huginn-second-brain",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI agent powered by Mastra framework",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
   },
   "repository": {
     "type": "git",
@@ -13,12 +15,17 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/xXValhallaCoderXx/huginn-second-brain/issues"
   },
   "homepage": "https://github.com/xXValhallaCoderXx/huginn-second-brain#readme",
   "dependencies": {
-    "openclaw": "^2026.3.8"
+    "@mastra/core": "latest",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "mastra": "latest",
+    "typescript": "^5"
   }
 }

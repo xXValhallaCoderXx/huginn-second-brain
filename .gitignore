@@ -1,12 +1,6 @@
 node_modules/
 .env
+.mastra/
+dist/
 *.key
 *.pem
-
-# Workspace - exclude personal memory content (keep structure)
-workspace/memory/*.md
-workspace/MEMORY.md
-workspace/IDENTITY.md
-workspace/.openclaw/
-
-.debug-context

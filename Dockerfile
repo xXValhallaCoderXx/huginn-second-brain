@@ -1,46 +1,33 @@
-FROM node:22-slim
+FROM node:22-slim AS build
 
-# Install curl for healthcheck and obsidian-cli
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
-
-# Install obsidian-cli (notesmd-cli)
-ARG NOTESMD_VERSION=0.3.3
-RUN curl -fsSL "https://github.com/Yakitrak/notesmd-cli/releases/download/v${NOTESMD_VERSION}/notesmd-cli_${NOTESMD_VERSION}_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin notesmd-cli && \
-    ln -s /usr/local/bin/notesmd-cli /usr/local/bin/obsidian-cli
-
-# Install Syncthing
-ARG SYNCTHING_VERSION=1.28.1
-RUN curl -fsSL "https://github.com/syncthing/syncthing/releases/download/v${SYNCTHING_VERSION}/syncthing-linux-amd64-v${SYNCTHING_VERSION}.tar.gz" \
-    | tar -xz --strip-components=1 -C /usr/local/bin syncthing-linux-amd64-v${SYNCTHING_VERSION}/syncthing
 
 WORKDIR /app
 
-# Install openclaw globally (pinned to avoid transient npm registry issues)
-RUN npm install -g openclaw@2026.3.8
+COPY package.json package-lock.json* ./
+RUN npm install
 
-# Copy workspace and config into /app (entrypoint copies to persistent volume on first run)
-COPY workspace/ /app/workspace/
-COPY config/openclaw.json /app/openclaw.json
-COPY scripts/ /app/scripts/
+COPY tsconfig.json ./
+COPY src/ ./src/
 
-# Create vault directory (on persistent volume via entrypoint; /vault is fallback)
-RUN mkdir -p /vault
+RUN npx mastra build
 
-# Set default vault path for obsidian-cli (entrypoint will update to /data/vault)
-RUN obsidian-cli set-default /vault 2>/dev/null || true
+# ── Runtime ──────────────────────────────────────────────────────────
+FROM node:22-slim
 
-# Copy entrypoint script
-COPY scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=build /app/.mastra/output ./
 
 ENV NODE_ENV=production
 
-# OpenClaw gateway + Syncthing GUI + Syncthing BEP sync protocol
-EXPOSE 18789 8384 22000
+EXPOSE 4111
 
-HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
-    CMD curl -f "http://localhost:${PORT:-18789}/health" || exit 1
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f "http://localhost:${PORT:-4111}/health" || exit 1
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "index.mjs"]
