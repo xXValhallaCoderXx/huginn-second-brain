@@ -17,7 +17,12 @@ bot.on("message:text", async (ctx) => {
   const userMessage = ctx.message.text;
 
   try {
-    const result = await huginnAgent.generate(userMessage);
+    const result = await huginnAgent.generate(userMessage, {
+      memory: {
+        resource: "nate",
+        thread: chatId,
+      },
+    });
     await ctx.reply(result.text);
   } catch (error) {
     console.error(
