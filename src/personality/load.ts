@@ -1,11 +1,27 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (true) {
+    if (
+      existsSync(join(dir, "package.json")) &&
+      existsSync(join(dir, "personality"))
+    ) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return startDir;
+}
 
-const soul = readFileSync(join(__dirname, "SOUL.md"), "utf-8");
-const identity = readFileSync(join(__dirname, "IDENTITY.md"), "utf-8");
-const memory = readFileSync(join(__dirname, "MEMORY.md"), "utf-8");
+const projectRoot = findProjectRoot(process.cwd());
+const personalityDir = join(projectRoot, "personality");
+
+const soul = readFileSync(join(personalityDir, "SOUL.md"), "utf-8");
+const identity = readFileSync(join(personalityDir, "IDENTITY.md"), "utf-8");
+const memory = readFileSync(join(personalityDir, "MEMORY.md"), "utf-8");
 
 export const personality = [soul, identity, memory].join("\n\n---\n\n");
