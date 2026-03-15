@@ -45,7 +45,7 @@ Notes:
 
 - Telegram webhooks require a public HTTPS URL.
 - The webhook route is handled through `grammY` using its Hono webhook adapter.
-- `TELEGRAM_WEBHOOK_SECRET` is passed to `grammY` so it validates `X-Telegram-Bot-Api-Secret-Token` for you.
+- `TELEGRAM_WEBHOOK_SECRET` is validated in the Mastra route handler before the request reaches grammY. Do **not** also pass `secretToken` to grammY's `webhookCallback()` (see Known Gotchas below).
 - The default Telegram agent and allowed update types now live in code for this POC.
 - The bot includes best-effort in-memory duplicate update suppression to reduce retry spam if Telegram redelivers the same update.
 - Normal Telegram messages are queued into a simple in-memory per-chat background worker, so the webhook can return quickly instead of waiting for the full Mastra generation.
@@ -130,4 +130,22 @@ These POC defaults now live in code instead of env:
 - Telegram allowed updates: `message`, `edited_message`
 
 That keeps deployment config focused on actual secrets and host-specific settings only.
+
+## Known gotchas
+
+### Webhook secret must not be validated twice
+
+The webhook secret is validated in the Mastra route handler (`src/mastra/routes/telegram-routes.ts`) before the request reaches grammY. Do **not** also pass `secretToken` to grammY's `webhookCallback()` — the double validation causes grammY to silently reject requests when running behind Mastra's Hono context wrapper, resulting in webhooks that hit the app but produce no response and no error logs.
+
+### `TELEGRAM_WEBHOOK_SECRET` is yours to define
+
+This is an arbitrary string you create — Telegram does not generate or provide it. You pass it to Telegram when registering the webhook (`secret_token` in the `setWebhook` API call), and Telegram sends it back in the `X-Telegram-Bot-Api-Secret-Token` header on every webhook delivery. Your app checks the header to verify the request is authentic. The value in your deployment environment must match the value used when running `npm run telegram:webhook:set`.
+
+### Webhook registration is manual
+
+The webhook is **not** registered automatically on app startup. After every deploy where the URL or bot token changes, you must run `npm run telegram:webhook:set` with the correct environment variables pointing at the deployed URL.
+
+### `getWebhookInfo` returns "Unauthorized"
+
+This means the `TELEGRAM_BOT_TOKEN` is invalid — either copied incorrectly, regenerated since it was set, or belongs to a different bot. Fix the token first; nothing else will work until Telegram accepts it.
 
