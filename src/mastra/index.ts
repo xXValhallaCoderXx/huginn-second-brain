@@ -6,6 +6,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { telegramRoutes } from './routes/telegram-routes.js';
+import { genericAgent } from './agents/generic-agent.js';
 import { weatherWorkflow } from './workflows/weather-workflow.js';
 import { weatherAgent } from './agents/weather-agent.js';
 
@@ -17,7 +19,10 @@ mkdirSync(storageDirectory, { recursive: true });
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
-  agents: { weatherAgent },
+  agents: { genericAgent, weatherAgent },
+  server: {
+    apiRoutes: telegramRoutes,
+  },
   storage: new LibSQLStore({
     id: "mastra-storage",
     // stores observability, scores, ... into persistent file storage
