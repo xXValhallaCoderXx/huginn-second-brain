@@ -63,6 +63,44 @@ Top-level files define how your Mastra project is configured, built, and connect
 | `package.json`        | Defines project metadata, dependencies, and available npm scripts.                                                |
 | `tsconfig.json`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
+## Telegram Webhook
+
+The bot uses Telegram's webhook mode. Telegram pushes updates to a public URL — **updating `.env` alone does NOT push the new URL to Telegram**. You must re-register the webhook any time the URL changes (new ngrok session, new deployment domain, etc.).
+
+### Re-register the webhook
+
+```bash
+pnpm telegram:webhook:set
+```
+
+This calls `apps/api/src/scripts/set-telegram-webhook.ts`, which reads `TELEGRAM_WEBHOOK_URL` from `.env` and calls the Telegram Bot API `setWebhook` method.
+
+### When to run this
+
+- Every time you start a new ngrok session (the URL changes each time)
+- After deploying to a new Railway domain
+- Any time the bot stops receiving messages despite the server running
+
+### Check current webhook status
+
+```bash
+pnpm telegram:webhook:info
+```
+
+### Agent key convention
+
+Mastra's `mastra.getAgent(key)` looks up agents by their **object key** in the `agents: {}` map in `src/mastra/index.ts` — **not** by the agent's `id` property. These must match:
+
+```typescript
+// src/mastra/index.ts
+agents: { sovereign: sovereignAgent }  // key = 'sovereign'
+
+// telegram-bot.ts
+getConfiguredTelegramAgentKey() // must return 'sovereign'
+```
+
+If you add a new agent, ensure the key in the `agents` map matches whatever string `getConfiguredTelegramAgentKey()` returns.
+
 ## Resources
 
 - [Mastra Documentation](https://mastra.ai/llms.txt)
