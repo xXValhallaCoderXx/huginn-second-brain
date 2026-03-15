@@ -95,8 +95,27 @@ function buildHelpMessage() {
         '• Send a text message to chat with your Mastra agent',
         '• /start shows the welcome message',
         '• /help shows this help message',
+        '• /status shows server and agent health',
         '',
         'This POC is wired to the built-in generic brain agent by default.',
+    ].join('\n');
+}
+
+function buildStatusMessage(activeChats: Set<number>, pendingQueueSize: number) {
+    const agentStatus = activeChats.size > 0
+        ? `🔄 Agent is processing ${activeChats.size} chat(s) right now`
+        : '✅ Agent is idle — ready for messages';
+
+    const queueStatus = pendingQueueSize > 0
+        ? `📬 ${pendingQueueSize} message(s) queued`
+        : '📭 Queue is empty';
+
+    return [
+        '🟢 Server: online',
+        agentStatus,
+        queueStatus,
+        '',
+        `⏱ ${new Date().toUTCString()}`,
     ].join('\n');
 }
 
@@ -270,6 +289,13 @@ function createTelegramMessageQueue(bot: Bot<TelegramBotContext>, mastra: Mastra
 
             void runChatWorker(job.chatId);
         },
+        getStats() {
+            let pendingQueueSize = 0;
+            for (const queue of jobsByChat.values()) {
+                pendingQueueSize += queue.length;
+            }
+            return { activeChats, pendingQueueSize };
+        },
     };
 }
 
@@ -296,6 +322,11 @@ function createTelegramBot(mastra: Mastra) {
         await replyWithText(ctx, buildHelpMessage(), ctx.msg?.message_id);
     });
 
+    bot.command('status', async ctx => {
+        const { activeChats, pendingQueueSize } = messageQueue.getStats();
+        await replyWithText(ctx, buildStatusMessage(activeChats, pendingQueueSize), ctx.msg?.message_id);
+    });
+
     bot.on(['message', 'edited_message'], async ctx => {
         if (ctx.from?.is_bot) {
             return;
@@ -310,7 +341,7 @@ function createTelegramBot(mastra: Mastra) {
 
         const normalizedCommand = normalizeTelegramCommand(userText);
 
-        if (normalizedCommand === '/start' || normalizedCommand === '/help') {
+        if (normalizedCommand === '/start' || normalizedCommand === '/help' || normalizedCommand === '/status') {
             return;
         }
 
