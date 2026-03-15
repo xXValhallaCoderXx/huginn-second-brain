@@ -338,9 +338,7 @@ export function getTelegramWebhookHandler(mastra: Mastra) {
     if (!cachedWebhookHandler || cachedMastra !== mastra) {
         const bot = createTelegramBot(mastra);
         console.info('[telegram] initializing webhook handler');
-        cachedWebhookHandler = webhookCallback(bot, 'hono', {
-            secretToken: process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || undefined,
-        }) as TelegramWebhookHandler;
+        cachedWebhookHandler = webhookCallback(bot, 'hono') as TelegramWebhookHandler;
         cachedMastra = mastra;
     }
 
