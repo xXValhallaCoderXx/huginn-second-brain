@@ -1,15 +1,29 @@
+## Monorepo layout
+
+This repository is now organized as a small pnpm workspace:
+
+```text
+apps/
+	api/   # Mastra + Hono + Telegram service
+	docs/  # placeholder for a future documentation app
+```
+
 ## Getting started
 
-```
-npm install
-npm run dev
+From the repository root:
+
+```text
+pnpm install
+pnpm dev
 ```
 
 Then open:
 
-```
+```text
 http://localhost:3000
 ```
+
+The root scripts proxy into `apps/api`, so local development still feels like a single app.
 
 The server automatically uses `PORT` in hosted environments such as Railway.
 
@@ -21,7 +35,7 @@ This project now includes a Telegram webhook route at:
 /telegram/webhook
 ```
 
-Add these values to `.env`:
+Add these values to the repository-root `.env`:
 
 ```
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
@@ -75,6 +89,23 @@ For local development without public HTTPS, use a tunnel such as ngrok or Cloudf
 
 For a basic Railway deployment, this is the prep I recommend.
 
+### Recommended monorepo setting
+
+Set the Railway service **Root Directory** to:
+
+```text
+apps/api
+```
+
+That keeps Railway focused on just the API service even after you add other apps like docs.
+
+If you prefer leaving the Railway service at the repository root, change the service commands instead:
+
+- Build command: `pnpm --filter @huginn/api build`
+- Start command: `pnpm --filter @huginn/api start`
+
+Using `apps/api` as the root directory is the simpler option.
+
 ### Use a separate hosted Telegram bot
 
 To avoid clashes with local development, use a different bot token in Railway than the one in your local `.env`.
@@ -106,6 +137,7 @@ If `TELEGRAM_WEBHOOK_URL` is not set, the webhook setup script derives it automa
 
 ### Railway service settings
 
+- Root directory: `apps/api`
 - Build command: `pnpm build`
 - Start command: `pnpm start`
 - Health check path: `/telegram/health`
@@ -120,6 +152,8 @@ pnpm telegram:webhook:set
 ```
 
 with the Railway environment (or equivalent secrets) so Telegram points the hosted bot at the hosted service.
+
+If Railway gives the service a new public domain after the migration, run the webhook setup step again so Telegram points at the new URL.
 
 ### What is hardcoded in code now
 

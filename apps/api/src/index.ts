@@ -1,10 +1,11 @@
-import 'dotenv/config'
-
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { type HonoBindings, type HonoVariables, MastraServer } from '@mastra/hono'
+import { loadEnvironment } from './config/load-env.js'
 import { getServerPort } from './config/runtime.js'
 import { mastra } from './mastra/index.js'
+
+loadEnvironment(import.meta.url)
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>()
 const server = new MastraServer({ app, mastra })

@@ -1,7 +1,8 @@
-import 'dotenv/config';
-
+import { loadEnvironment } from '../config/load-env.js';
 import { getTelegramWebhookUrl } from '../config/runtime.js';
 import { getTelegramWebhookInfo, setTelegramWebhook } from '../telegram/telegram-client.js';
+
+loadEnvironment(import.meta.url);
 
 function getWebhookConfig() {
     return {

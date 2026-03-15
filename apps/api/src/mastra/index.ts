@@ -1,18 +1,19 @@
 
 import { mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { findWorkspaceRoot, getPackageRoot } from '../config/path-utils.js';
 import { telegramRoutes } from './routes/telegram-routes.js';
 import { genericAgent } from './agents/generic-agent.js';
 import { weatherWorkflow } from './workflows/weather-workflow.js';
 import { weatherAgent } from './agents/weather-agent.js';
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
-const storageDirectory = join(projectRoot, '.data');
+const packageRoot = getPackageRoot(import.meta.url);
+const workspaceRoot = findWorkspaceRoot(packageRoot);
+const storageDirectory = join(workspaceRoot, '.data');
 const storagePath = join(storageDirectory, 'mastra.db');
 
 mkdirSync(storageDirectory, { recursive: true });
