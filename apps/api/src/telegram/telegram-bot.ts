@@ -3,6 +3,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Bot, GrammyError, HttpError, type Context, webhookCallback } from 'grammy';
 import { ensureUserSeeded } from '../identity/seed.js';
 import { getPersonalityStore } from '../identity/store.js';
+import { getLearningDb } from '../learning/db.js';
+import { runLearningLoop } from '../learning/loop.js';
 import { splitTelegramMessage } from './telegram-client.js';
 
 type TelegramBotConfig = {
@@ -327,6 +329,33 @@ function createTelegramBot(mastra: Mastra) {
         await replyWithText(ctx, buildStatusMessage(activeChats, pendingQueueSize), ctx.msg?.message_id);
     });
 
+    bot.command('learn', async ctx => {
+        if (!ctx.from?.id) return;
+
+        const resourceId = resolveResourceId(ctx.from.id);
+        await replyWithText(ctx, '🧠 Starting personality learning loop...', ctx.msg?.message_id);
+
+        try {
+            const db = getLearningDb();
+            const store = getPersonalityStore();
+            const result = await runLearningLoop({ db, store, resourceId });
+
+            const statusEmoji = result.outcome === 'COMMITTED' ? '✅' : '⚠️';
+            const summary = [
+                `${statusEmoji} Learning ${result.outcome.toLowerCase()}`,
+                `Iterations: ${result.iterations}`,
+                result.finalScore != null ? `Score: ${result.finalScore.toFixed(2)}` : null,
+                `Time: ${(result.durationMs / 1000).toFixed(1)}s`,
+                result.changeSummary,
+            ].filter(Boolean).join('\n');
+
+            await replyWithText(ctx, summary);
+        } catch (error) {
+            console.error('[learning] /learn command failed:', error);
+            await replyWithText(ctx, '❌ Learning loop failed. Check server logs.');
+        }
+    });
+
     bot.on(['message', 'edited_message'], async ctx => {
         if (ctx.from?.is_bot) {
             return;
@@ -341,7 +370,7 @@ function createTelegramBot(mastra: Mastra) {
 
         const normalizedCommand = normalizeTelegramCommand(userText);
 
-        if (normalizedCommand === '/start' || normalizedCommand === '/help' || normalizedCommand === '/status') {
+        if (normalizedCommand === '/start' || normalizedCommand === '/help' || normalizedCommand === '/status' || normalizedCommand === '/learn') {
             return;
         }
 

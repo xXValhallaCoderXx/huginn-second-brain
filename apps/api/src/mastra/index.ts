@@ -9,6 +9,8 @@ import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/obs
 import { findWorkspaceRoot, getPackageRoot } from '../config/path-utils.js';
 import { runMigrations } from '../identity/migrate.js';
 import { initPersonalityStore } from '../identity/store.js';
+import { runLearningMigrations } from '../learning/migrations.js';
+import { initLearningDb } from '../learning/db.js';
 import { telegramRoutes } from './routes/telegram-routes.js';
 import { genericAgent } from './agents/generic-agent.js';
 import { sovereignAgent } from './agents/sovereign.js';
@@ -27,6 +29,8 @@ mkdirSync(storageDirectory, { recursive: true });
 const personalityClient = createClient({ url: `file:${personalityDbPath}` });
 initPersonalityStore(personalityClient);
 await runMigrations(personalityClient);
+initLearningDb(personalityClient);
+await runLearningMigrations(personalityClient);
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },

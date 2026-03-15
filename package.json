@@ -15,6 +15,7 @@
     "start:api": "pnpm --filter @huginn/api start",
     "start:public-docs": "pnpm --filter @huginn/public-docs serve",
     "start:private-docs": "pnpm --filter @huginn/private-docs serve",
+    "studio": "pnpm --filter @huginn/api studio",
     "telegram:webhook:set": "pnpm --filter @huginn/api telegram:webhook:set",
     "telegram:webhook:info": "pnpm --filter @huginn/api telegram:webhook:info"
   }

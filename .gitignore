@@ -33,6 +33,7 @@ lerna-debug.log*
 dist/
 apps/*/dist/
 apps/*/build/
+/apps/api/.mastra
 apps/*/.docusaurus/
 *.tsbuildinfo
 .claude
