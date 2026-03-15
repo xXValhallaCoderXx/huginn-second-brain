@@ -21,6 +21,16 @@ export const telegramRoutes = [
             },
         },
         handler: async c => {
+            const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
+            const receivedSecret = c.req.header('X-Telegram-Bot-Api-Secret-Token');
+
+            console.info('[telegram] webhook route hit');
+
+            if (expectedSecret && receivedSecret !== expectedSecret) {
+                console.warn('[telegram] webhook secret mismatch');
+                return c.json({ ok: false, error: 'invalid telegram webhook secret' }, 401);
+            }
+
             const mastra = c.get('mastra');
             const webhookHandler = getTelegramWebhookHandler(mastra);
             return webhookHandler(c);
