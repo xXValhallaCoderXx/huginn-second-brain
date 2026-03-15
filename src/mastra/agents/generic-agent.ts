@@ -1,8 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
-const defaultModel = process.env.MASTRA_MODEL?.trim() || 'openrouter/openai/gpt-5-mini';
-
 export const genericAgent = new Agent({
     id: 'generic-brain-agent',
     name: 'Generic Brain Agent',
@@ -21,6 +19,6 @@ export const genericAgent = new Agent({
 
       This is an early POC, so optimize for usefulness and simplicity over complex behavior.
 `,
-    model: defaultModel,
+    model: "openrouter/openai/gpt-5-mini",
     memory: new Memory(),
 });

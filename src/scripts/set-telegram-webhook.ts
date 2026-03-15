@@ -1,21 +1,13 @@
 import 'dotenv/config';
 
+import { getTelegramWebhookUrl } from '../config/runtime.js';
 import { getTelegramWebhookInfo, setTelegramWebhook } from '../telegram/telegram-client.js';
 
 function getWebhookConfig() {
-    const url = process.env.TELEGRAM_WEBHOOK_URL?.trim();
-
-    if (!url) {
-        throw new Error('TELEGRAM_WEBHOOK_URL is not set');
-    }
-
     return {
-        url,
+        url: getTelegramWebhookUrl(),
         secretToken: process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || undefined,
-        allowedUpdates: process.env.TELEGRAM_ALLOWED_UPDATES?.split(',').map(value => value.trim()).filter(Boolean) || [
-            'message',
-            'edited_message',
-        ],
+        allowedUpdates: [...['message', 'edited_message'] as const],
     };
 }
 

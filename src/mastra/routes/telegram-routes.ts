@@ -1,9 +1,7 @@
 import { registerApiRoute } from '@mastra/core/server';
 import { getTelegramWebhookHandler } from '../../telegram/telegram-bot.js';
 
-function getConfiguredTelegramAgentKey() {
-    return process.env.TELEGRAM_AGENT?.trim() || 'genericAgent';
-}
+
 
 export const telegramRoutes = [
     registerApiRoute('/telegram/webhook', {
@@ -48,7 +46,7 @@ export const telegramRoutes = [
                     botTokenConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim()),
                     webhookUrlConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_URL?.trim()),
                     webhookSecretConfigured: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET?.trim()),
-                    agent: getConfiguredTelegramAgentKey(),
+                    agent: "genericAgent",
                 },
             });
         },

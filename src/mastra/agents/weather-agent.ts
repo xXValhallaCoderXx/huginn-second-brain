@@ -2,8 +2,6 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { weatherTool } from '../tools/weather-tool.js';
 
-const defaultModel = process.env.MASTRA_MODEL?.trim() || 'openrouter/openai/gpt-5-mini';
-
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
@@ -21,7 +19,7 @@ export const weatherAgent = new Agent({
 
       Use the weatherTool to fetch current weather data.
 `,
-  model: defaultModel,
+  model: "openrouter/openai/gpt-5-mini",
   tools: { weatherTool },
 
   memory: new Memory(),

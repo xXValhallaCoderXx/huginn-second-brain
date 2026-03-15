@@ -11,6 +11,8 @@ Then open:
 http://localhost:3000
 ```
 
+The server automatically uses `PORT` in hosted environments such as Railway.
+
 ## Telegram bot integration
 
 This project now includes a Telegram webhook route at:
@@ -25,8 +27,6 @@ Add these values to `.env`:
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_URL=https://your-public-domain/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=replace-with-a-random-secret
-TELEGRAM_AGENT=genericAgent
-TELEGRAM_ALLOWED_UPDATES=message,edited_message
 ```
 
 Set the webhook after your public HTTPS URL is live:
@@ -46,7 +46,7 @@ Notes:
 - Telegram webhooks require a public HTTPS URL.
 - The webhook route is handled through `grammY` using its Hono webhook adapter.
 - `TELEGRAM_WEBHOOK_SECRET` is passed to `grammY` so it validates `X-Telegram-Bot-Api-Secret-Token` for you.
-- `TELEGRAM_AGENT` now defaults to `genericAgent`, which is a simple base second-brain assistant for this POC.
+- The default Telegram agent and allowed update types now live in code for this POC.
 - The bot includes best-effort in-memory duplicate update suppression to reduce retry spam if Telegram redelivers the same update.
 - Normal Telegram messages are queued into a simple in-memory per-chat background worker, so the webhook can return quickly instead of waiting for the full Mastra generation.
 
@@ -70,4 +70,64 @@ Limitations of this POC approach:
 If you later want a production-ready version, the next step would be a durable external queue.
 
 For local development without public HTTPS, use a tunnel such as ngrok or Cloudflare Tunnel and set `TELEGRAM_WEBHOOK_URL` to the public tunnel URL.
+
+## Railway deployment
+
+For a basic Railway deployment, this is the prep I recommend.
+
+### Use a separate hosted Telegram bot
+
+To avoid clashes with local development, use a different bot token in Railway than the one in your local `.env`.
+
+Recommended split:
+
+- local bot token for ngrok/local testing
+- hosted bot token for Railway
+
+Also use a different `TELEGRAM_WEBHOOK_SECRET` in Railway.
+
+### Minimal Railway secrets
+
+For Railway, keep secrets minimal:
+
+```dotenv
+OPENROUTER_API_KEY=your-openrouter-api-key
+TELEGRAM_BOT_TOKEN=your-hosted-telegram-bot-token
+TELEGRAM_WEBHOOK_SECRET=your-random-secret
+```
+
+Optional:
+
+```dotenv
+TELEGRAM_WEBHOOK_URL=https://your-railway-domain/telegram/webhook
+```
+
+If `TELEGRAM_WEBHOOK_URL` is not set, the webhook setup script derives it automatically from Railway's `RAILWAY_PUBLIC_DOMAIN`.
+
+### Railway service settings
+
+- Build command: `pnpm build`
+- Start command: `pnpm start`
+- Health check path: `/telegram/health`
+- Public domain: enabled
+
+### Register the hosted webhook
+
+After Railway is deployed and has a public domain, run:
+
+```text
+pnpm telegram:webhook:set
+```
+
+with the Railway environment (or equivalent secrets) so Telegram points the hosted bot at the hosted service.
+
+### What is hardcoded in code now
+
+These POC defaults now live in code instead of env:
+
+- model: `openrouter/openai/gpt-5-mini`
+- Telegram agent: `genericAgent`
+- Telegram allowed updates: `message`, `edited_message`
+
+That keeps deployment config focused on actual secrets and host-specific settings only.
 

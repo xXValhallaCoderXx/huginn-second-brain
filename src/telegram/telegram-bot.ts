@@ -49,7 +49,7 @@ function getTelegramBotToken() {
 }
 
 function getConfiguredTelegramAgentKey() {
-    return process.env.TELEGRAM_AGENT?.trim() || 'genericAgent';
+    return "genericAgent";
 }
 
 function normalizeTelegramCommand(text: string) {
@@ -88,7 +88,7 @@ function buildHelpMessage() {
         '• /start shows the welcome message',
         '• /help shows this help message',
         '',
-        'Tip: you can switch the routed agent later with TELEGRAM_AGENT in your .env file. The default is genericAgent.',
+        'This POC is wired to the built-in generic brain agent by default.',
     ].join('\n');
 }
 
