@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",
+    "@libsql/client": "^0.15.15",
     "@mastra/core": "^1.13.2",
     "@mastra/hono": "^1.2.4",
     "@mastra/libsql": "^1.7.0",

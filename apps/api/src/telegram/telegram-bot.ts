@@ -1,5 +1,8 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { Bot, GrammyError, HttpError, type Context, webhookCallback } from 'grammy';
+import { ensureUserSeeded } from '../identity/seed.js';
+import { getPersonalityStore } from '../identity/store.js';
 import { splitTelegramMessage } from './telegram-client.js';
 
 type TelegramBotConfig = {
@@ -13,6 +16,7 @@ type TelegramBotContext = Context & {
 
 type TelegramMessageJob = {
     chatId: number;
+    telegramUserId?: number;
     chatType?: string;
     from?: {
         firstName?: string;
@@ -22,6 +26,10 @@ type TelegramMessageJob = {
     text: string;
     replyToMessageId?: number;
 };
+
+function resolveResourceId(telegramUserId: number): string {
+    return `tg-user-${telegramUserId}`;
+}
 
 type TelegramWebhookHandler = (context: {
     req: {
@@ -49,7 +57,7 @@ function getTelegramBotToken() {
 }
 
 function getConfiguredTelegramAgentKey() {
-    return "genericAgent";
+    return 'sovereign';
 }
 
 function normalizeTelegramCommand(text: string) {
@@ -183,13 +191,24 @@ function createTelegramMessageQueue(bot: Bot<TelegramBotContext>, mastra: Mastra
                     console.info(`[telegram] processing queued message for chat ${chatId} with agent ${agentKey}`);
                     await bot.api.sendChatAction(chatId, 'typing');
 
+                    // Resolve stable per-user identity (falls back to chat ID for anonymous messages)
+                    const resourceId = job.telegramUserId
+                        ? resolveResourceId(job.telegramUserId)
+                        : `telegram-chat:${chatId}`;
+
+                    await ensureUserSeeded(getPersonalityStore(), resourceId);
+
+                    const requestContext = new RequestContext<{ 'resource-id': string }>();
+                    requestContext.set('resource-id', resourceId);
+
                     const result = await agent.generate(buildTelegramPrompt(job), {
+                        requestContext,
                         memory: {
-                            resource: `telegram-chat:${chatId}`,
-                            thread: `telegram-chat:${chatId}`,
+                            resource: resourceId,
+                            thread: `tg-chat:${chatId}`,
                         },
                         modelSettings: {
-                            maxOutputTokens: 700,
+                            maxOutputTokens: 4000,
                         },
                     });
 
@@ -303,6 +322,7 @@ function createTelegramBot(mastra: Mastra) {
 
         messageQueue.enqueue({
             chatId: ctx.chatId,
+            telegramUserId: ctx.from?.id,
             chatType: ctx.chat?.type,
             from: {
                 firstName: ctx.from?.first_name,
