@@ -19,6 +19,16 @@ import { createScorer } from '@mastra/core/evals';
 import { z } from 'zod';
 import { SCORER_MODEL, TOKEN_BUDGET, log } from '../config.js';
 
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+export interface ScorerResult {
+  composite: number;
+  hardGateFailed: string | false;
+  reason: string;
+}
+
 const MIN_LENGTH = 20;
 
 const WEIGHTS = {
@@ -159,3 +169,34 @@ Weakest dimension: ${d.weakestDimension}
 Write a concise one-sentence critique suitable as feedback for a redraft attempt. Focus on the weakest dimension and what specifically should be improved.`;
     },
   });
+
+// ---------------------------------------------------------------------------
+// Convenience wrapper used by the learning loop
+// ---------------------------------------------------------------------------
+
+export async function scorePersonalityCandidate(input: {
+  proposed: string;
+  current: string;
+  evidence: string[];
+}): Promise<ScorerResult> {
+  const result = await personalityScorer.run({
+    output: {
+      candidateSoul: input.proposed,
+      candidateIdentity: input.proposed,
+      currentSoul: input.current,
+      currentIdentity: input.current,
+      observations: input.evidence.join('\n'),
+    },
+  });
+
+  const hardGateFailed =
+    result.analyzeStepResult?.weakestDimension?.startsWith('hardGate')
+      ? (result.analyzeStepResult.weakestDimension as string)
+      : false;
+
+  return {
+    composite: result.score ?? 0,
+    hardGateFailed,
+    reason: result.reason ?? '',
+  };
+}

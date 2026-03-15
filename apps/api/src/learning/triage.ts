@@ -9,6 +9,7 @@ export interface TriageResult {
 /** Lightweight agent for triage — no memory, no tools. */
 const triageAgent = new Agent({
     id: 'learning-triage',
+    name: 'Learning Triage',
     model: TRIAGE_MODEL,
     instructions: 'You evaluate whether a personal AI assistant should run a personality refinement cycle. Answer with EXACTLY one line: YES: <reason> or NO: <reason>.',
 });

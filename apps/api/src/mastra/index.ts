@@ -6,11 +6,15 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { loadEnvironment } from '../config/load-env.js';
 import { findWorkspaceRoot, getPackageRoot } from '../config/path-utils.js';
 import { runMigrations } from '../identity/migrate.js';
+
+// Ensure .env is loaded (mastra dev doesn't auto-load from workspace root)
+loadEnvironment(import.meta.url);
 import { initPersonalityStore } from '../identity/store.js';
 import { runLearningMigrations } from '../learning/migrations.js';
-import { initLearningDb } from '../learning/db.js';
+import { initLearningDb, initMastraStorageDb } from '../learning/db.js';
 import { telegramRoutes } from './routes/telegram-routes.js';
 import { genericAgent } from './agents/generic-agent.js';
 import { sovereignAgent } from './agents/sovereign.js';
@@ -31,6 +35,10 @@ initPersonalityStore(personalityClient);
 await runMigrations(personalityClient);
 initLearningDb(personalityClient);
 await runLearningMigrations(personalityClient);
+
+// Initialize Mastra storage DB client (for reading mastra_messages)
+const mastraStorageClient = createClient({ url: `file:${storagePath}` });
+initMastraStorageDb(mastraStorageClient);
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },

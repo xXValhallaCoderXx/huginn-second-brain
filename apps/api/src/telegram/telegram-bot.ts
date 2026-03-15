@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Bot, GrammyError, HttpError, type Context, webhookCallback } from 'grammy';
 import { ensureUserSeeded } from '../identity/seed.js';
 import { getPersonalityStore } from '../identity/store.js';
-import { getLearningDb } from '../learning/db.js';
+import { getLearningDb, getMastraStorageDb } from '../learning/db.js';
 import { runLearningLoop } from '../learning/loop.js';
 import { splitTelegramMessage } from './telegram-client.js';
 
@@ -337,8 +337,9 @@ function createTelegramBot(mastra: Mastra) {
 
         try {
             const db = getLearningDb();
+            const storageDb = getMastraStorageDb();
             const store = getPersonalityStore();
-            const result = await runLearningLoop({ db, store, resourceId });
+            const result = await runLearningLoop({ db, storageDb, store, resourceId });
 
             const statusEmoji = result.outcome === 'COMMITTED' ? '✅' : '⚠️';
             const summary = [

@@ -36,6 +36,7 @@ interface GatheredContext {
 
 const draftAgent = new Agent({
     id: 'learning-drafter',
+    name: 'Learning Drafter',
     model: DRAFT_MODEL,
     instructions: `You are a personality profiler for a personal AI assistant. Your job is to update the assistant's personality files based on conversation evidence.
 
@@ -157,17 +158,18 @@ function parseDraftResponse(text: string): { soul: string; identity: string } | 
 
 export async function runLearningLoop(opts: {
     db: Client;
+    storageDb: Client;
     store: PersonalityStore;
     resourceId: string;
     threadId?: string;
 }): Promise<LearningRunResult> {
-    const { db, store, resourceId, threadId } = opts;
+    const { db, storageDb, store, resourceId, threadId } = opts;
     const startTime = Date.now();
 
     // --- GATHER ---
     const context = threadId
-        ? await gatherContext(db, resourceId, threadId)
-        : await gatherAllThreadContext(db, resourceId);
+        ? await gatherContext(storageDb, resourceId, threadId)
+        : await gatherAllThreadContext(storageDb, resourceId);
 
     if (context.messages.length < 3) {
         log('not enough messages to learn from');
