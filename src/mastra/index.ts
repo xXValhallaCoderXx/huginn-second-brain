@@ -1,41 +1,43 @@
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
-import { webhookCallback } from "grammy";
-import { huginnAgent } from "./agents/huginn.js";
-import { bot } from "../telegram/bot.js";
-import { storage } from "./storage.js";
 
-// Register the webhook with Telegram when the server starts, if configured.
-// Set TELEGRAM_WEBHOOK_URL to your public deployment URL, e.g.:
-//   https://<your-app>.up.railway.app/telegram/webhook
-if (process.env.TELEGRAM_WEBHOOK_URL) {
-  bot.api
-    .setWebhook(process.env.TELEGRAM_WEBHOOK_URL)
-    .then(() =>
-      console.log(
-        "[Telegram] Webhook registered:",
-        process.env.TELEGRAM_WEBHOOK_URL
-      )
-    )
-    .catch((err: unknown) =>
-      console.error("[Telegram] Failed to register webhook:", err)
-    );
-}
+import { mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { weatherWorkflow } from './workflows/weather-workflow.js';
+import { weatherAgent } from './agents/weather-agent.js';
 
-const handleTelegramUpdate = webhookCallback(bot, "hono");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+const storageDirectory = join(projectRoot, '.data');
+const storagePath = join(storageDirectory, 'mastra.db');
+
+mkdirSync(storageDirectory, { recursive: true });
 
 export const mastra = new Mastra({
-  agents: { huginnAgent },
-  storage,
-  server: {
-    apiRoutes: [
-      registerApiRoute("/telegram/webhook", {
-        method: "POST",
-        // grammY's HonoAdapter is structurally compatible with Hono's Context;
-        // the cast aligns the generic variables that Mastra adds to the context.
-        handler: (c) =>
-          handleTelegramUpdate(c as Parameters<typeof handleTelegramUpdate>[0]),
-      }),
-    ],
-  },
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    // stores observability, scores, ... into persistent file storage
+    url: `file:${storagePath}`,
+  }),
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
+    },
+  }),
 });
