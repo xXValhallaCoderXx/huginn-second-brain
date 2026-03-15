@@ -1,9 +1,0 @@
-{
-  "name": "@huginn/docs",
-  "private": true,
-  "version": "0.0.0",
-  "scripts": {
-    "dev": "echo 'Scaffold your docs app here (for example Docusaurus)'",
-    "build": "echo 'Scaffold your docs app here (for example Docusaurus)'"
-  }
-}

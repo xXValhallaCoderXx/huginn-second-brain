@@ -4,8 +4,9 @@ This repository is now organized as a small pnpm workspace:
 
 ```text
 apps/
-	api/   # Mastra + Hono + Telegram service
-	docs/  # placeholder for a future documentation app
+	api/           # Mastra + Hono + Telegram service
+	public-docs/   # public-facing Docusaurus site
+	private-docs/  # internal/private Docusaurus site
 ```
 
 ## Getting started
@@ -26,6 +27,23 @@ http://localhost:3000
 The root scripts proxy into `apps/api`, so local development still feels like a single app.
 
 The server automatically uses `PORT` in hosted environments such as Railway.
+
+## Docs apps
+
+Two separate Docusaurus apps live alongside the API:
+
+- `apps/public-docs` for public-facing product and onboarding docs
+- `apps/private-docs` for internal runbooks, operations notes, and team-only guides
+
+Useful commands from the repository root:
+
+```text
+pnpm dev:public-docs
+pnpm dev:private-docs
+pnpm build:docs
+```
+
+The docs apps are scaffolded as independent docs-only sites, so you can deploy them separately without coupling them to the Telegram API service.
 
 ## Telegram bot integration
 
@@ -169,7 +187,7 @@ That keeps deployment config focused on actual secrets and host-specific setting
 
 ### Webhook secret must not be validated twice
 
-The webhook secret is validated in the Mastra route handler (`src/mastra/routes/telegram-routes.ts`) before the request reaches grammY. Do **not** also pass `secretToken` to grammY's `webhookCallback()` — the double validation causes grammY to silently reject requests when running behind Mastra's Hono context wrapper, resulting in webhooks that hit the app but produce no response and no error logs.
+The webhook secret is validated in the Mastra route handler (`apps/api/src/mastra/routes/telegram-routes.ts`) before the request reaches grammY. Do **not** also pass `secretToken` to grammY's `webhookCallback()` — the double validation causes grammY to silently reject requests when running behind Mastra's Hono context wrapper, resulting in webhooks that hit the app but produce no response and no error logs.
 
 ### `TELEGRAM_WEBHOOK_SECRET` is yours to define
 
