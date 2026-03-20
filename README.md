@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 1 POC — Milestone 2 (agent with personality injection + streaming chat) complete
+> **Status**: Phase 1 POC — Milestone 3 (Telegram bot, channel linking, deep link UX) complete
 
 ---
 
@@ -52,8 +52,10 @@ huginn-second-brain/
 │   │       │   ├── index.tsx     # Landing / sign-in page
 │   │       │   ├── _authenticated.tsx  # Auth guard layout
 │   │       │   └── _authenticated/
-│   │       │       ├── dashboard.tsx  # Personality editor + navigation
-│   │       │       └── chat.tsx       # Streaming chat with Huginn agent
+│   │       │       ├── dashboard.tsx  # Personality editor + channel status
+│   │       │       ├── chat.tsx       # Streaming chat with Huginn agent
+│   │       │       └── link/
+│   │       │           └── telegram.tsx # Telegram linking (deep link + QR code)
 │   │       └── lib/
 │   │           ├── auth.ts       # Better Auth server config
 │   │           ├── auth-client.ts # Better Auth React client
@@ -66,9 +68,12 @@ huginn-second-brain/
 │       ├── scripts/
 │       │   └── test-m2.ts        # M2 acceptance test
 │       └── src/
-│           ├── index.ts          # Hono HTTP server (/chat, /chat/stream)
+│           ├── index.ts          # Hono HTTP server (/chat, /chat/stream, /telegram/info)
 │           ├── identity/
 │           │   └── instructions.ts # buildInstructions() — personality injection
+│           ├── telegram/
+│           │   ├── bot.ts        # grammY bot factory (auto-discovers username)
+│           │   └── handlers.ts   # /start, /link, message routing handlers
 │           └── mastra/
 │               ├── index.ts      # Mastra instance + LibSQL storage
 │               └── agents/
@@ -86,7 +91,7 @@ huginn-second-brain/
             │   ├── personality-files.ts
             │   └── linking-codes.ts
             ├── services/         # Service implementations
-            │   ├── account-service.ts  # AccountService + ensureAccount + deleteAccount
+            │   ├── account-service.ts  # AccountService + linking code helpers
             │   ├── personality-store.ts # PersonalityStore (load, save, exists, history)
             │   └── seed.ts       # Default SOUL + IDENTITY seeding
             └── types/            # TypeScript interfaces
@@ -202,7 +207,7 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | Agent framework | Mastra                                       |
 | Agent memory    | Mastra Memory + libSQL                       |
 | LLM routing     | OpenRouter (Claude Sonnet 4)                 |
-| Telegram        | grammY (planned)                             |
+| Telegram        | grammY                                       |
 | Runtime         | Node.js 22+                                  |
 | Infrastructure  | Docker Compose / Railway                     |
 

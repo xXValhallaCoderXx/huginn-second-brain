@@ -61,12 +61,13 @@ pnpm db:studio                        # Drizzle Studio GUI
 
 ### Service Implementations — packages/shared/src/services/
 
-- `createAccountService(db)` — implements `AccountService` (M1 methods done, M3 stubs)
+- `createAccountService(db)` — implements `AccountService` (all 9 methods fully implemented)
 - `ensureAccount(db, { id, ... })` — upsert account with specific ID (for tests/seeding)
 - `deleteAccount(db, id)` — cascading delete of an account and related data
 - `getGoogleSubForBaUser(db, baUserId)` — looks up Google `sub` from Better Auth's `account` table
 - `createPersonalityStore(db)` — implements `PersonalityStore` (load, save, exists, history)
 - `seedNewAccount(db, accountId)` — seeds default SOUL + IDENTITY personality files
+- `verifyAndConsumeLinkingCode(db, code)` — atomic verify + consume (race-condition safe)
 
 ### Interface Contracts — packages/shared/src/types/
 
@@ -93,8 +94,18 @@ pnpm db:studio                        # Drizzle Studio GUI
 - Agent definition in `src/mastra/agents/huginn.ts` — dynamic instructions via `requestContext`
 - `requestContext` (NOT `runtimeContext`) carries `account-id` and `personality-store` per request
 - `@mastra/memory` installed separately from `@mastra/core`; memory inherits storage from Mastra instance
-- Thread ID convention for Telegram: `tg-chat-${chatId}`, for web: `web-${accountId}-${timestamp}`
+- Thread ID convention for Telegram: `tg-chat-${chatId}`, for web: `chat-${accountId}-${timestamp}`
 - Working memory scoped to `resourceId` (= `accounts.id`), persists across threads
+
+### Telegram Bot Patterns (apps/agent)
+
+- grammY bot in `src/telegram/bot.ts` — factory pattern, opt-in via `TELEGRAM_BOT_TOKEN`
+- Bot username auto-discovered via `bot.init()` (`getMe` API) — no env var needed
+- `GET /telegram/info` endpoint exposes `{ username }` to the web app for deep link URLs
+- Handlers in `src/telegram/handlers.ts`: `/start` (deep link payload), `/link CODE` (fallback), message routing
+- Deep link format: `https://t.me/BOT_USERNAME?start=LINK-CODE` — Telegram sends `/start LINK-CODE` to bot
+- `verifyAndConsumeLinkingCode` used for atomic race-condition-safe linking
+- Long polling mode with graceful shutdown on SIGINT/SIGTERM
 
 ## Gotchas
 
@@ -117,20 +128,22 @@ pnpm db:studio                        # Drizzle Studio GUI
 - [apps/web/vite.config.ts](apps/web/vite.config.ts) — TanStack Start + Nitro + Vite setup
 - [apps/web/src/lib/auth.ts](apps/web/src/lib/auth.ts) — Better Auth server config (Drizzle adapter, Google OAuth)
 - [apps/web/server/api/auth/\[...\].ts](apps/web/server/api/auth/[...].ts) — Nitro catch-all route for Better Auth API
-- [apps/agent/src/index.ts](apps/agent/src/index.ts) — Hono HTTP server with /chat and /chat/stream endpoints
-- [apps/agent/src/mastra/agents/huginn.ts](apps/agent/src/mastra/agents/huginn.ts) — Agent definition with dynamic personality instructions
-- [apps/agent/src/identity/instructions.ts](apps/agent/src/identity/instructions.ts) — buildInstructions() loads SOUL + IDENTITY from PersonalityStore
+- [apps/agent/src/index.ts](apps/agent/src/index.ts) — Hono HTTP server (/chat, /chat/stream, /telegram/info)
+- [apps/agent/src/telegram/bot.ts](apps/agent/src/telegram/bot.ts) — grammY bot factory with auto-discovered username
+- [apps/agent/src/telegram/handlers.ts](apps/agent/src/telegram/handlers.ts) — /start, /link, message routing handlers
+- [apps/agent/src/mastra/agents/huginn.ts](apps/agent/src/mastra/agents/huginn.ts) — Agent definition with dynamic personality
+- [apps/agent/src/identity/instructions.ts](apps/agent/src/identity/instructions.ts) — buildInstructions() personality injection
 - [apps/agent/src/mastra/index.ts](apps/agent/src/mastra/index.ts) — Mastra instance config
-- [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation
+- [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation (all methods)
 
 ## Milestones
 
-Current: **M2 complete** (agent with personality injection, streaming chat UI). Next milestones from spec:
+Current: **M3 complete** (Telegram bot, channel linking, deep link UX). Next milestones from spec:
 
 - ~~**M0**: Scaffolding, schemas, both apps boot~~ ✅
 - ~~**M1**: Better Auth + Google OAuth, account creation, session middleware~~ ✅
 - ~~**M2**: Personality files CRUD (web UI), dynamic instructions, streaming chat~~ ✅
-- **M3**: Telegram bot (grammY), channel linking, message handling
+- ~~**M3**: Telegram bot (grammY), channel linking, deep link + QR code UX~~ ✅
 - **M4**: Working memory, conversation quality, full smoke test
 
 See `sovereign-architecture-spec.md` § Build Milestones for acceptance criteria.
