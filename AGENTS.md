@@ -100,9 +100,8 @@ pnpm db:studio                        # Drizzle Studio GUI
 
 ## Milestones
 
-Current: **M0 complete** (scaffolding, schemas, both apps boot). Next milestones from spec:
+Current: **M1 complete** (scaffolding, schemas, both apps boot). Next milestones from spec:
 
-- **M1**: Better Auth + Google OAuth, account creation, session middleware
 - **M2**: Personality files CRUD (web UI), seeding flow, dynamic instructions
 - **M3**: Telegram bot (grammY), channel linking, message handling
 - **M4**: Working memory, conversation quality, full smoke test

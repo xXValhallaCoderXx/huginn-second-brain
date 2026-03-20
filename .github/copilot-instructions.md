@@ -11,7 +11,7 @@ Turborepo monorepo with pnpm workspaces:
 | ----------------- | -------------------------------------------------------- | ---- |
 | `apps/web`        | TanStack Start (React 19 + Vite 8 + Nitro) web dashboard | 3000 |
 | `apps/agent`      | Mastra agent service + Telegram bot (grammY)             | —    |
-| `packages/shared` | Drizzle schemas, DB factory, TypeScript interfaces       | —    |
+| `packages/shared` | Drizzle schemas, DB factory, services, TypeScript interfaces | —    |
 
 ### Two-Database Design
 
@@ -58,6 +58,13 @@ pnpm db:studio                        # Drizzle Studio GUI
 - `channel_links` — FK to accounts, `provider` + `providerUserId` with two unique composite indexes
 - `personality_files` — append-only versioning (INSERT with incremented `version`, never UPDATE)
 - `linking_codes` — one-time codes with 10min expiry, `used` boolean flag
+- `user`, `session`, `account`, `verification` — Better Auth tables (schema in `auth.ts`)
+
+### Service Implementations — packages/shared/src/services/
+
+- `createAccountService(db)` — implements `AccountService` (M1 methods done, M3 stubs)
+- `getGoogleSubForBaUser(db, baUserId)` — looks up Google `sub` from Better Auth's `account` table
+- `createPersonalityStore(db)` — implements `PersonalityStore` (load, save, exists, history)
 
 ### Interface Contracts — packages/shared/src/types/
 
@@ -68,11 +75,22 @@ pnpm db:studio                        # Drizzle Studio GUI
 ### TanStack Start Patterns (apps/web)
 
 - Uses `@tanstack/react-start` (NOT the old `@tanstack/start` package)
-- Vite config: `tanstackStart()` + `viteReact()` + `nitro()` plugins
+- Vite config: `tanstackStart()` + `viteReact()` + `nitro({ serverDir: true })` plugins
 - Root layout: `shellComponent` renders HTML document, `component` renders route content
 - `HeadContent` and `Scripts` from `@tanstack/react-router` (NOT `Meta` from old package)
 - Route files export `Route = createFileRoute(...)` — file-based routing
 - `routeTree.gen.ts` is auto-generated — never edit it
+- Server functions use `.inputValidator()` (NOT `.validator()`)
+- `getRequestHeaders()` from `@tanstack/react-start/server` (NOT `getWebRequest`)
+
+### Better Auth Patterns (apps/web)
+
+- Server config: `apps/web/src/lib/auth.ts` — `betterAuth()` with Drizzle adapter + Google OAuth
+- Client config: `apps/web/src/lib/auth-client.ts` — `createAuthClient()` with `useSession`, `signIn`, `signOut`
+- Drizzle adapter **requires** `schema` option: `{ user, session, account: authAccount, verification }`
+- API routes served via **Nitro server route** at `apps/web/server/api/auth/[...].ts` (NOT TanStack Router routes)
+- Session retrieval in server functions uses `getRequestHeaders()` passed to `auth.api.getSession()`
+- Account resolution: BA session → `getGoogleSubForBaUser()` → find/create Huginn `accounts` row → seed personality files
 
 ### Mastra Patterns (apps/agent)
 
@@ -84,8 +102,11 @@ pnpm db:studio                        # Drizzle Studio GUI
 ## Gotchas
 
 - **Nitro version pinned**: `nitro@3.0.260311-beta` — must match for TanStack Start compatibility. Don't upgrade without testing.
+- **Server-side `.env` loading**: Nitro/h3 server code does NOT get Vite's env vars. Server modules (`auth.ts`, `db.ts`) use `dotenv` to load `.env` from the monorepo root via `config({ path: resolve(import.meta.dirname, "../../../../.env") })`.
 - **drizzle.config.ts loads `.env` from monorepo root**: Uses `resolve(process.cwd(), "../../.env")` because drizzle-kit bundles to CJS where `import.meta.dirname` is undefined.
 - **Better Auth `user` ≠ Huginn `accounts`**: Two separate tables linked by `googleSub`. Always query our `accounts` table, not Better Auth's.
+- **Drizzle adapter schema required**: The `drizzleAdapter()` call must pass `schema: { user, session, account: authAccount, verification }` or Better Auth can't find its tables.
+- **Keep drizzle-orm queries in `@huginn/shared`**: In pnpm monorepos, importing `drizzle-orm` operators (like `eq`) in apps causes duplicate instance type conflicts. All DB queries live in `packages/shared/src/services/`.
 - **Telegram user IDs are numbers, stored as text**: Convert with `String(telegramUserId)` before storing.
 - **`pnpm dev` blocks the shell** (`persistent: true` in turbo.json). Use separate terminals or filter to individual apps.
 - `*.gen.ts` files are gitignored. If routing breaks, restart the dev server.
@@ -96,13 +117,17 @@ pnpm db:studio                        # Drizzle Studio GUI
 - [README.md](README.md) — project overview, setup instructions, commands
 - [packages/shared/drizzle.config.ts](packages/shared/drizzle.config.ts) — Drizzle Kit config with .env workaround
 - [apps/web/vite.config.ts](apps/web/vite.config.ts) — TanStack Start + Nitro + Vite setup
+- [apps/web/src/lib/auth.ts](apps/web/src/lib/auth.ts) — Better Auth server config (Drizzle adapter, Google OAuth)
+- [apps/web/server/api/auth/[...].ts](apps/web/server/api/auth/[...].ts) — Nitro catch-all route for Better Auth API
+- [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation
 - [apps/agent/src/mastra/index.ts](apps/agent/src/mastra/index.ts) — Mastra instance config
 
 ## Milestones
 
-Current: **M0 complete** (scaffolding, schemas, both apps boot). Next milestones from spec:
+Current: **M1 complete** (auth, account creation, protected routes). Next milestones from spec:
 
-- **M1**: Better Auth + Google OAuth, account creation, session middleware
+- ~~**M0**: Scaffolding, schemas, both apps boot~~ ✅
+- ~~**M1**: Better Auth + Google OAuth, account creation, session middleware~~ ✅
 - **M2**: Personality files CRUD (web UI), seeding flow, dynamic instructions
 - **M3**: Telegram bot (grammY), channel linking, message handling
 - **M4**: Working memory, conversation quality, full smoke test

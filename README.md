@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 1 POC — Milestone 0 (scaffolding) complete
+> **Status**: Phase 1 POC — Milestone 1 (auth & account creation) complete
 
 ---
 
@@ -14,7 +14,7 @@ Huginn is a monorepo with two apps and a shared package:
 | ----------------- | ---------------------------------------------------------------------------- |
 | `apps/web`        | TanStack Start (React) web dashboard — auth, linking, personality management |
 | `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, channel handling  |
-| `packages/shared` | Drizzle schemas, DB connection factory, TypeScript interfaces                |
+| `packages/shared` | Drizzle schemas, DB connection factory, services, TypeScript interfaces    |
 
 **Two databases, strict boundary:**
 
@@ -43,13 +43,24 @@ huginn-second-brain/
 ├── apps/
 │   ├── web/                      # TanStack Start web app
 │   │   ├── vite.config.ts        # Vite + TanStack Start + Nitro
+│   │   ├── server/
+│   │   │   └── api/auth/[...].ts # Nitro catch-all for Better Auth
 │   │   └── src/
 │   │       ├── router.tsx        # TanStack Router config
 │   │       ├── routes/
 │   │       │   ├── __root.tsx    # Root layout
-│   │       │   └── index.tsx     # Landing page
+│   │       │   ├── index.tsx     # Landing / sign-in page
+│   │       │   ├── _authenticated.tsx  # Auth guard layout
+│   │       │   └── _authenticated/
+│   │       │       └── dashboard.tsx  # Protected dashboard
 │   │       └── lib/
-│   │           └── db.ts         # DB connection (server-only)
+│   │           ├── auth.ts       # Better Auth server config
+│   │           ├── auth-client.ts # Better Auth React client
+│   │           ├── db.ts         # DB connection (server-only)
+│   │           ├── session.ts    # Session server function
+│   │           ├── server-fns.ts # Auth + personality server fns
+│   │           ├── account-resolution.ts # BA session → Huginn account
+│   │           └── seed.ts       # Default personality seeding
 │   │
 │   └── agent/                    # Mastra agent service
 │       └── src/
@@ -64,9 +75,13 @@ huginn-second-brain/
             ├── db.ts             # createDb() factory
             ├── schema/           # Drizzle table definitions
             │   ├── accounts.ts
+            │   ├── auth.ts       # Better Auth tables (user, session, account, verification)
             │   ├── channel-links.ts
             │   ├── personality-files.ts
             │   └── linking-codes.ts
+            ├── services/         # Service implementations
+            │   ├── account-service.ts  # AccountService + getGoogleSubForBaUser
+            │   └── personality-store.ts # PersonalityStore
             └── types/            # TypeScript interfaces
                 ├── accounts.ts   # Account, ChannelLink, AccountService
                 └── identity.ts   # PersonalityStore, PersonalityFileType
@@ -121,7 +136,7 @@ docker compose ps
 pnpm db:push
 ```
 
-This creates 4 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`.
+This creates 8 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`, plus 4 Better Auth tables (`user`, `session`, `account`, `verification`).
 
 ### 5. Run development servers
 
@@ -174,7 +189,7 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | --------------- | -------------------------------------------- |
 | Monorepo        | Turborepo + pnpm workspaces                  |
 | Web framework   | TanStack Start (React 19, Vite 8, Nitro)     |
-| Auth            | Better Auth (planned) — Google OAuth         |
+| Auth            | Better Auth — Google OAuth                   |
 | App database    | PostgreSQL (Docker locally, Railway in prod) |
 | ORM             | Drizzle                                      |
 | Agent framework | Mastra                                       |

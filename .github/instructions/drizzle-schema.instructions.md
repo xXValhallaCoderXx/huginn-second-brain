@@ -69,3 +69,7 @@ reason: text("reason"),  // why this version was created
 1. Add named export to `packages/shared/src/schema/index.ts`
 2. Run `pnpm db:push` to apply to local Postgres
 3. If adding a new interface contract, create it in `packages/shared/src/types/`
+
+## Better Auth Tables (Exception)
+
+The tables in `auth.ts` (`user`, `session`, `authAccount`, `verification`) do NOT follow the standard column patterns above. Their schema is dictated by Better Auth \u2014 they use `text("id").primaryKey()` instead of UUID, and include `updatedAt` columns. Do not modify these columns; follow the Better Auth docs for any changes.

@@ -10,6 +10,6 @@ export default defineConfig({
     plugins: [
         tanstackStart(),
         viteReact(),
-        nitro(),
+        nitro({ serverDir: true }),
     ],
 });
