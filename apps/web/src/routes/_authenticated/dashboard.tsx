@@ -1,5 +1,5 @@
 import React from "react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { loadPersonalityFiles, savePersonalityFile } from "../../lib/server-fns";
 import { signOut } from "../../lib/auth-client";
 
@@ -21,18 +21,35 @@ function Dashboard() {
         <div style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", maxWidth: "800px", margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h1>Huginn Dashboard</h1>
-                <button
-                    onClick={() => signOut().then(() => window.location.assign("/"))}
-                    style={{
-                        padding: "0.5rem 1rem",
-                        cursor: "pointer",
-                        background: "none",
-                        border: "1px solid #666",
-                        borderRadius: "4px",
-                    }}
-                >
-                    Sign out
-                </button>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <Link
+                        to="/chat"
+                        style={{
+                            padding: "0.5rem 1rem",
+                            cursor: "pointer",
+                            background: "#2563eb",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            textDecoration: "none",
+                            fontSize: "0.9rem",
+                        }}
+                    >
+                        💬 Chat
+                    </Link>
+                    <button
+                        onClick={() => signOut().then(() => window.location.assign("/"))}
+                        style={{
+                            padding: "0.5rem 1rem",
+                            cursor: "pointer",
+                            background: "none",
+                            border: "1px solid #666",
+                            borderRadius: "4px",
+                        }}
+                    >
+                        Sign out
+                    </button>
+                </div>
             </div>
 
             <section style={{ marginBottom: "2rem" }}>
