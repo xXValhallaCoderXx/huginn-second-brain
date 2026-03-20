@@ -2,10 +2,10 @@ import {
     createAccountService,
     createPersonalityStore,
     getGoogleSubForBaUser,
+    seedNewAccount,
     type Database,
     type Account,
 } from "@huginn/shared";
-import { seedNewAccount } from "./seed";
 import type { Session } from "./auth";
 
 /**

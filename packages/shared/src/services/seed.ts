@@ -1,4 +1,4 @@
-import type { PersonalityStore } from "@huginn/shared";
+import type { PersonalityStore } from "../types/identity";
 
 export const DEFAULT_SOUL = `# SOUL — Communication Style
 

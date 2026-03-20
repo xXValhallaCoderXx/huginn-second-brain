@@ -31,6 +31,36 @@ export async function getGoogleSubForBaUser(
     return row?.accountId ?? null;
 }
 
+/**
+ * Create an account with a specific ID (useful for tests/seeding).
+ * Skips if account with that ID already exists.
+ */
+export async function ensureAccount(
+    db: Database,
+    id: string,
+    googleSub: string,
+    email: string,
+    displayName?: string,
+): Promise<Account> {
+    const existing = await db.query.accounts.findFirst({
+        where: eq(accounts.id, id),
+    });
+    if (existing) return toAccount(existing);
+
+    const [row] = await db
+        .insert(accounts)
+        .values({ id, googleSub, email, displayName: displayName ?? null })
+        .returning();
+    return toAccount(row);
+}
+
+/**
+ * Delete an account by ID (cascades to personality_files, channel_links, etc).
+ */
+export async function deleteAccount(db: Database, id: string): Promise<void> {
+    await db.delete(accounts).where(eq(accounts.id, id));
+}
+
 export function createAccountService(db: Database): AccountService {
     return {
         async createAccount(googleSub, email, displayName) {

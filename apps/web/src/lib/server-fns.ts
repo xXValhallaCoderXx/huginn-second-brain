@@ -38,3 +38,26 @@ export const loadPersonalityFiles = createServerFn({ method: "GET" })
         ]);
         return { soul, identity };
     });
+
+/**
+ * Server function: save a personality file (append-only versioning).
+ */
+export const savePersonalityFile = createServerFn({ method: "POST" })
+    .inputValidator(
+        (data: { accountId: string; fileType: "SOUL" | "IDENTITY"; content: string; reason: string }) => data,
+    )
+    .handler(async ({ data }) => {
+        const store = createPersonalityStore(db);
+        await store.save(data.accountId, data.fileType, data.content, data.reason);
+        return { success: true };
+    });
+
+/**
+ * Server function: load version history for a personality file.
+ */
+export const loadPersonalityHistory = createServerFn({ method: "GET" })
+    .inputValidator((data: { accountId: string; fileType: "SOUL" | "IDENTITY" }) => data)
+    .handler(async ({ data }) => {
+        const store = createPersonalityStore(db);
+        return store.history(data.accountId, data.fileType);
+    });

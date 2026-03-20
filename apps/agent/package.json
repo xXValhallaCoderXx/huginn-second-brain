@@ -10,9 +10,15 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@huginn/shared": "workspace:*",
     "@mastra/core": "^1.15",
-    "@mastra/libsql": "^1.7"
+    "@mastra/hono": "^1.2.6",
+    "@mastra/libsql": "^1.7",
+    "@mastra/memory": "^1.9.0",
+    "@node-rs/argon2": "^2.0.2",
+    "dotenv": "^17.3.1",
+    "hono": "^4.12.8"
   },
   "devDependencies": {
     "@types/node": "^22",
