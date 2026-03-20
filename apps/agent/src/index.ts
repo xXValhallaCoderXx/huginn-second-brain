@@ -19,7 +19,8 @@ const personalityStore = createPersonalityStore(db);
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
-// Allow web app (port 3000) to call agent APIs
+// Allow web app (port 3000) and Studio (port 3001) to call APIs
+app.use("/api/*", cors({ origin: "*" }));
 app.use("/chat/*", cors({ origin: "*" }));
 app.use("/chat", cors({ origin: "*" }));
 app.use("/telegram/*", cors({ origin: "*" }));
