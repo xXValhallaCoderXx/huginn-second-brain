@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
 
-config({ path: resolve(import.meta.dirname, "../../../../.env") });
+config({ path: resolve(import.meta.dirname, "../../../../.env"), quiet: true });
 
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
