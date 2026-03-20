@@ -24,6 +24,8 @@ drizzle/meta/
 # Database files
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 .data/
 
 # OS
@@ -34,3 +36,4 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.env

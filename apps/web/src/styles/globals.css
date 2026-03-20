@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+    /* Colors — Page & Surface */
+    --color-page: #080a0d;
+    --color-surface: #0f1218;
+    --color-surface-overlay: rgba(8, 10, 13, 0.5);
+    --color-border: #364055;
+
+    /* Colors — Text hierarchy */
+    --color-text-heading: #ffffff;
+    --color-text-emphasis: #eceef2;
+    --color-text-body: #b1bbcc;
+    --color-text-muted: #8797af;
+    --color-text-subtle: #667896;
+
+    /* Colors — Accent */
+    --color-accent: #433bff;
+    --color-accent-light: #5e61ff;
+    --color-accent-lighter: #8b92ff;
+
+    /* Colors — Status */
+    --color-success: #22c55e;
+    --color-success-light: #4ade80;
+    --color-success-lighter: #86efac;
+    --color-error: #f87171;
+
+    /* Colors — Brand */
+    --color-telegram: #0088cc;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 9999px;
+
+    /* Shadows */
+    --shadow-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+
+    /* Fonts */
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Base reset */
+html {
+    background-color: var(--color-page);
+    color: var(--color-text-body);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-pill);
+}

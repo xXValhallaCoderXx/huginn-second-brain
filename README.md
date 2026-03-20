@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 1 POC — Milestone 0 (scaffolding) complete
+> **Status**: Phase 1 POC — Milestone 3 (Telegram bot, channel linking, deep link UX) complete
 
 ---
 
@@ -14,7 +14,7 @@ Huginn is a monorepo with two apps and a shared package:
 | ----------------- | ---------------------------------------------------------------------------- |
 | `apps/web`        | TanStack Start (React) web dashboard — auth, linking, personality management |
 | `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, channel handling  |
-| `packages/shared` | Drizzle schemas, DB connection factory, TypeScript interfaces                |
+| `packages/shared` | Drizzle schemas, DB connection factory, services, TypeScript interfaces    |
 
 **Two databases, strict boundary:**
 
@@ -43,19 +43,41 @@ huginn-second-brain/
 ├── apps/
 │   ├── web/                      # TanStack Start web app
 │   │   ├── vite.config.ts        # Vite + TanStack Start + Nitro
+│   │   ├── server/
+│   │   │   └── api/auth/[...].ts # Nitro catch-all for Better Auth
 │   │   └── src/
 │   │       ├── router.tsx        # TanStack Router config
 │   │       ├── routes/
 │   │       │   ├── __root.tsx    # Root layout
-│   │       │   └── index.tsx     # Landing page
+│   │       │   ├── index.tsx     # Landing / sign-in page
+│   │       │   ├── _authenticated.tsx  # Auth guard layout
+│   │       │   └── _authenticated/
+│   │       │       ├── dashboard.tsx  # Personality editor + channel status
+│   │       │       ├── chat.tsx       # Streaming chat with Huginn agent
+│   │       │       └── link/
+│   │       │           └── telegram.tsx # Telegram linking (deep link + QR code)
 │   │       └── lib/
-│   │           └── db.ts         # DB connection (server-only)
+│   │           ├── auth.ts       # Better Auth server config
+│   │           ├── auth-client.ts # Better Auth React client
+│   │           ├── db.ts         # DB connection (server-only)
+│   │           ├── session.ts    # Session server function
+│   │           ├── server-fns.ts # Auth + personality server fns
+│   │           └── account-resolution.ts # BA session → Huginn account
 │   │
-│   └── agent/                    # Mastra agent service
+│   └── agent/                    # Mastra agent service (port 4111)
+│       ├── scripts/
+│       │   └── test-m2.ts        # M2 acceptance test
 │       └── src/
-│           ├── index.ts          # Entry point
+│           ├── index.ts          # Hono HTTP server (/chat, /chat/stream, /telegram/info)
+│           ├── identity/
+│           │   └── instructions.ts # buildInstructions() — personality injection
+│           ├── telegram/
+│           │   ├── bot.ts        # grammY bot factory (auto-discovers username)
+│           │   └── handlers.ts   # /start, /link, message routing handlers
 │           └── mastra/
-│               └── index.ts      # Mastra instance + LibSQL storage
+│               ├── index.ts      # Mastra instance + LibSQL storage
+│               └── agents/
+│                   └── huginn.ts # Agent definition (dynamic instructions, memory)
 │
 └── packages/
     └── shared/                   # Shared library
@@ -64,9 +86,14 @@ huginn-second-brain/
             ├── db.ts             # createDb() factory
             ├── schema/           # Drizzle table definitions
             │   ├── accounts.ts
+            │   ├── auth.ts       # Better Auth tables (user, session, account, verification)
             │   ├── channel-links.ts
             │   ├── personality-files.ts
             │   └── linking-codes.ts
+            ├── services/         # Service implementations
+            │   ├── account-service.ts  # AccountService + linking code helpers
+            │   ├── personality-store.ts # PersonalityStore (load, save, exists, history)
+            │   └── seed.ts       # Default SOUL + IDENTITY seeding
             └── types/            # TypeScript interfaces
                 ├── accounts.ts   # Account, ChannelLink, AccountService
                 └── identity.ts   # PersonalityStore, PersonalityFileType
@@ -121,7 +148,7 @@ docker compose ps
 pnpm db:push
 ```
 
-This creates 4 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`.
+This creates 8 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`, plus 4 Better Auth tables (`user`, `session`, `account`, `verification`).
 
 ### 5. Run development servers
 
@@ -160,11 +187,11 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 
 ### apps/agent
 
-| Command                             | Description               |
-| ----------------------------------- | ------------------------- |
-| `pnpm --filter @huginn/agent dev`   | Dev mode with tsx watch   |
-| `pnpm --filter @huginn/agent start` | Run agent                 |
-| `pnpm --filter @huginn/agent build` | Type-check (tsc --noEmit) |
+| Command                             | Description                              |
+| ----------------------------------- | ---------------------------------------- |
+| `pnpm --filter @huginn/agent dev`   | Dev mode with tsx watch (port 4111)      |
+| `pnpm --filter @huginn/agent start` | Run agent                                |
+| `pnpm --filter @huginn/agent build` | Type-check (tsc --noEmit)                |
 
 ---
 
@@ -174,13 +201,13 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | --------------- | -------------------------------------------- |
 | Monorepo        | Turborepo + pnpm workspaces                  |
 | Web framework   | TanStack Start (React 19, Vite 8, Nitro)     |
-| Auth            | Better Auth (planned) — Google OAuth         |
+| Auth            | Better Auth — Google OAuth                   |
 | App database    | PostgreSQL (Docker locally, Railway in prod) |
 | ORM             | Drizzle                                      |
 | Agent framework | Mastra                                       |
 | Agent memory    | Mastra Memory + libSQL                       |
 | LLM routing     | OpenRouter (Claude Sonnet 4)                 |
-| Telegram        | grammY (planned)                             |
+| Telegram        | grammY                                       |
 | Runtime         | Node.js 22+                                  |
 | Infrastructure  | Docker Compose / Railway                     |
 
