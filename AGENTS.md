@@ -58,6 +58,7 @@ pnpm db:studio                        # Drizzle Studio GUI
 - `channel_links` — FK to accounts, `provider` + `providerUserId` with two unique composite indexes
 - `personality_files` — append-only versioning (INSERT with incremented `version`, never UPDATE)
 - `linking_codes` — one-time codes with 10min expiry, `used` boolean flag
+- `user`, `session`, `account`, `verification` — Better Auth tables (schema in `auth.ts`)
 
 ### Service Implementations — packages/shared/src/services/
 
@@ -78,13 +79,32 @@ pnpm db:studio                        # Drizzle Studio GUI
 ### TanStack Start Patterns (apps/web)
 
 - Uses `@tanstack/react-start` (NOT the old `@tanstack/start` package)
-- Vite config: `tanstackStart()` + `viteReact()` + `nitro()` plugins
+- Vite config plugins (order matters): `tailwindcss()` + `tanstackStart()` + `viteReact()` + `nitro({ serverDir: true })`
 - Root layout: `shellComponent` renders HTML document, `component` renders route content
 - `HeadContent` and `Scripts` from `@tanstack/react-router` (NOT `Meta` from old package)
 - Route files export `Route = createFileRoute(...)` — file-based routing
 - `routeTree.gen.ts` is auto-generated — never edit it
 - Server functions use `.inputValidator()` (NOT `.validator()`)
 - `getRequestHeaders()` from `@tanstack/react-start/server` (NOT `getWebRequest`)
+
+### Better Auth Patterns (apps/web)
+
+- Server config: `apps/web/src/lib/auth.ts` — `betterAuth()` with Drizzle adapter + Google OAuth
+- Client config: `apps/web/src/lib/auth-client.ts` — `createAuthClient()` with `useSession`, `signIn`, `signOut`
+- Drizzle adapter **requires** `schema` option: `{ user, session, account: authAccount, verification }`
+- API routes served via **Nitro server route** at `apps/web/server/api/auth/[...].ts` (NOT TanStack Router routes)
+- Session retrieval in server functions uses `getRequestHeaders()` passed to `auth.api.getSession()`
+- Account resolution: BA session → `getGoogleSubForBaUser()` → find/create Huginn `accounts` row → seed personality files
+- `resolveAuthenticatedAccount()` helper in `server-fns.ts` — resolves session → account, throws if unauthenticated
+
+### Web UI Patterns (apps/web)
+
+- **Tailwind CSS v4** with `@theme` directive in `apps/web/src/styles/globals.css` — defines design tokens (colors, shadows, radii)
+- Global CSS imported in `__root.tsx` via `import "../styles/globals.css"`
+- **Component extraction pattern**: Full page components live in `apps/web/src/components/` (safe from route generator). Route files are minimal stubs that import from components.
+- Existing extracted components: `nav-bar.tsx`, `channels-page.tsx`, `edit-identity-page.tsx`
+- Dark theme with semantic color tokens: `--color-page`, `--color-surface`, `--color-accent`, `--color-text-heading`, etc.
+- NavBar component in `nav-bar.tsx` — shared navigation across authenticated routes, rendered in `_authenticated.tsx` layout
 
 ### Mastra Patterns (apps/agent)
 
@@ -115,7 +135,7 @@ pnpm db:studio                        # Drizzle Studio GUI
 - **Better Auth `user` ≠ Huginn `accounts`**: Two separate tables linked by `googleSub`. Always query our `accounts` table, not Better Auth's.
 - **Drizzle adapter schema required**: The `drizzleAdapter()` call must pass `schema: { user, session, account: authAccount, verification }` or Better Auth can't find its tables.
 - **Keep drizzle-orm queries in `@huginn/shared`**: In pnpm monorepos, importing `drizzle-orm` operators (like `eq`) in apps causes duplicate instance type conflicts. All DB queries live in `packages/shared/src/services/`.
-- **TanStack route generator clobbers new route files**: While the dev server is running, TanStack's file-based router will overwrite new route files with stubs. Stop the dev server before creating new route files, or verify content before committing.
+- **TanStack route generator clobbers new route files**: While the dev server is running, TanStack's file-based router will overwrite new route files with stubs. **Workaround**: Put full page components in `apps/web/src/components/` and keep route files as minimal stubs that import from those components.
 - **Telegram user IDs are numbers, stored as text**: Convert with `String(telegramUserId)` before storing.
 - **`pnpm dev` blocks the shell** (`persistent: true` in turbo.json). Use separate terminals or filter to individual apps.
 - `*.gen.ts` files are gitignored. If routing breaks, restart the dev server.
@@ -125,9 +145,14 @@ pnpm db:studio                        # Drizzle Studio GUI
 - [sovereign-architecture-spec.md](sovereign-architecture-spec.md) — authoritative specification (all decisions, data shapes, milestones)
 - [README.md](README.md) — project overview, setup instructions, commands
 - [packages/shared/drizzle.config.ts](packages/shared/drizzle.config.ts) — Drizzle Kit config with .env workaround
-- [apps/web/vite.config.ts](apps/web/vite.config.ts) — TanStack Start + Nitro + Vite setup
+- [apps/web/vite.config.ts](apps/web/vite.config.ts) — TanStack Start + Tailwind + Nitro + Vite setup
+- [apps/web/src/styles/globals.css](apps/web/src/styles/globals.css) — Tailwind CSS v4 theme tokens + global styles
 - [apps/web/src/lib/auth.ts](apps/web/src/lib/auth.ts) — Better Auth server config (Drizzle adapter, Google OAuth)
+- [apps/web/src/lib/server-fns.ts](apps/web/src/lib/server-fns.ts) — All server functions (personality CRUD, linking, channels)
 - [apps/web/server/api/auth/\[...\].ts](apps/web/server/api/auth/[...].ts) — Nitro catch-all route for Better Auth API
+- [apps/web/src/components/nav-bar.tsx](apps/web/src/components/nav-bar.tsx) — NavBar + MobileMenu shared navigation
+- [apps/web/src/components/edit-identity-page.tsx](apps/web/src/components/edit-identity-page.tsx) — Personality editor (SOUL/IDENTITY) full page component
+- [apps/web/src/components/channels-page.tsx](apps/web/src/components/channels-page.tsx) — Connected channels management page component
 - [apps/agent/src/index.ts](apps/agent/src/index.ts) — Hono HTTP server (/chat, /chat/stream, /telegram/info)
 - [apps/agent/src/telegram/bot.ts](apps/agent/src/telegram/bot.ts) — grammY bot factory with auto-discovered username
 - [apps/agent/src/telegram/handlers.ts](apps/agent/src/telegram/handlers.ts) — /start, /link, message routing handlers
