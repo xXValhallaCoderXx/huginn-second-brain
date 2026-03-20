@@ -1,21 +1,23 @@
 import React from "react";
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { loadPersonalityFiles, savePersonalityFile } from "../../lib/server-fns";
+import { loadPersonalityFiles, savePersonalityFile, getChannelLinks, unlinkTelegramChannel } from "../../lib/server-fns";
 import { signOut } from "../../lib/auth-client";
+import type { ChannelLink } from "@huginn/shared";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
     loader: async ({ context }) => {
-        const personality = await loadPersonalityFiles({
-            data: { accountId: context.account.id },
-        });
-        return { personality };
+        const [personality, channels] = await Promise.all([
+            loadPersonalityFiles({ data: { accountId: context.account.id } }),
+            getChannelLinks(),
+        ]);
+        return { personality, channels };
     },
     component: Dashboard,
 });
 
 function Dashboard() {
     const { account } = Route.useRouteContext();
-    const { personality } = Route.useLoaderData();
+    const { personality, channels } = Route.useLoaderData();
 
     return (
         <div style={{ padding: "2rem", fontFamily: "system-ui, sans-serif", maxWidth: "800px", margin: "0 auto" }}>
@@ -68,11 +70,70 @@ function Dashboard() {
 
             <section style={{ marginBottom: "2rem" }}>
                 <h2>Connected Channels</h2>
-                <p style={{ color: "#888" }}>No channels connected yet.</p>
+                <ChannelStatus channels={channels} />
             </section>
 
             <PersonalitySection title="SOUL.md" fileType="SOUL" content={personality.soul} accountId={account.id} />
             <PersonalitySection title="IDENTITY.md" fileType="IDENTITY" content={personality.identity} accountId={account.id} />
+        </div>
+    );
+}
+
+function ChannelStatus({ channels }: { channels: ChannelLink[] }) {
+    const router = useRouter();
+    const [unlinking, setUnlinking] = React.useState(false);
+    const telegram = channels.find((c) => c.provider === "telegram");
+
+    const handleUnlink = async () => {
+        if (!confirm("Unlink Telegram? You'll need to re-link to use the bot.")) return;
+        setUnlinking(true);
+        try {
+            await unlinkTelegramChannel();
+            await router.invalidate();
+        } finally {
+            setUnlinking(false);
+        }
+    };
+
+    if (telegram) {
+        return (
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <span>Telegram: ✅ Connected</span>
+                <button
+                    onClick={handleUnlink}
+                    disabled={unlinking}
+                    style={{
+                        padding: "0.25rem 0.75rem",
+                        cursor: unlinking ? "wait" : "pointer",
+                        background: "none",
+                        border: "1px solid #dc2626",
+                        color: "#dc2626",
+                        borderRadius: "4px",
+                        fontSize: "0.85rem",
+                    }}
+                >
+                    {unlinking ? "Unlinking..." : "Unlink"}
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <span style={{ color: "#888" }}>Telegram: Not connected</span>
+            <Link
+                to="/link/telegram"
+                style={{
+                    padding: "0.25rem 0.75rem",
+                    background: "#2563eb",
+                    color: "white",
+                    borderRadius: "4px",
+                    textDecoration: "none",
+                    fontSize: "0.85rem",
+                }}
+            >
+                Connect
+            </Link>
         </div>
     );
 }

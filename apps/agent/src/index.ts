@@ -8,18 +8,21 @@ import { cors } from "hono/cors";
 import { MastraServer } from "@mastra/hono";
 import type { HonoBindings, HonoVariables } from "@mastra/hono";
 import { RequestContext } from "@mastra/core/request-context";
-import { createDb, createPersonalityStore } from "@huginn/shared";
+import { createDb, createPersonalityStore, createAccountService } from "@huginn/shared";
 
 import { mastra } from "./mastra/index.js";
+import { createBot, getBotUsername } from "./telegram/bot.js";
+import { registerHandlers } from "./telegram/handlers.js";
 
 const db = createDb(process.env.APP_DATABASE_URL!);
 const personalityStore = createPersonalityStore(db);
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
-// Allow web app (port 3000) to call agent APIs directly
+// Allow web app (port 3000) to call agent APIs
 app.use("/chat/*", cors({ origin: "*" }));
 app.use("/chat", cors({ origin: "*" }));
+app.use("/telegram/*", cors({ origin: "*" }));
 
 const server = new MastraServer({ app, mastra });
 await server.init();
@@ -114,8 +117,34 @@ app.post("/chat/stream", async (c) => {
     });
 });
 
+// --- Telegram bot info endpoint ---
+app.get("/telegram/info", (c) => {
+    const username = getBotUsername();
+    if (!username) {
+        return c.json({ error: "Telegram bot not configured" }, 404);
+    }
+    return c.json({ username });
+});
+
 const port = Number(process.env.AGENT_PORT ?? 4111);
 serve({ fetch: app.fetch, port }, () => {
     console.log(`Huginn agent service running on http://localhost:${port}`);
     console.log("Registered agents:", Object.keys(mastra.listAgents()));
 });
+
+// --- Telegram bot (long polling) ---
+const bot = await createBot();
+if (bot) {
+    const accountService = createAccountService(db);
+    registerHandlers(bot, { mastra, accountService, personalityStore, db });
+    bot.start({
+        onStart: () => console.log("[telegram] Bot started (long polling)"),
+    });
+
+    const shutdown = () => {
+        console.log("[telegram] Stopping bot...");
+        bot.stop();
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+}

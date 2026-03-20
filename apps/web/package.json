@@ -18,6 +18,7 @@
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.39",
     "h3": "2.0.1-rc.17",
+    "qrcode.react": "^4.2.0",
     "react": "^19",
     "react-dom": "^19"
   },
