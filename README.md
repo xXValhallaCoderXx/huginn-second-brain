@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 1 POC — Milestone 1 (auth & account creation) complete
+> **Status**: Phase 1 POC — Milestone 2 (agent with personality injection + streaming chat) complete
 
 ---
 
@@ -52,21 +52,27 @@ huginn-second-brain/
 │   │       │   ├── index.tsx     # Landing / sign-in page
 │   │       │   ├── _authenticated.tsx  # Auth guard layout
 │   │       │   └── _authenticated/
-│   │       │       └── dashboard.tsx  # Protected dashboard
+│   │       │       ├── dashboard.tsx  # Personality editor + navigation
+│   │       │       └── chat.tsx       # Streaming chat with Huginn agent
 │   │       └── lib/
 │   │           ├── auth.ts       # Better Auth server config
 │   │           ├── auth-client.ts # Better Auth React client
 │   │           ├── db.ts         # DB connection (server-only)
 │   │           ├── session.ts    # Session server function
 │   │           ├── server-fns.ts # Auth + personality server fns
-│   │           ├── account-resolution.ts # BA session → Huginn account
-│   │           └── seed.ts       # Default personality seeding
+│   │           └── account-resolution.ts # BA session → Huginn account
 │   │
-│   └── agent/                    # Mastra agent service
+│   └── agent/                    # Mastra agent service (port 4111)
+│       ├── scripts/
+│       │   └── test-m2.ts        # M2 acceptance test
 │       └── src/
-│           ├── index.ts          # Entry point
+│           ├── index.ts          # Hono HTTP server (/chat, /chat/stream)
+│           ├── identity/
+│           │   └── instructions.ts # buildInstructions() — personality injection
 │           └── mastra/
-│               └── index.ts      # Mastra instance + LibSQL storage
+│               ├── index.ts      # Mastra instance + LibSQL storage
+│               └── agents/
+│                   └── huginn.ts # Agent definition (dynamic instructions, memory)
 │
 └── packages/
     └── shared/                   # Shared library
@@ -80,8 +86,9 @@ huginn-second-brain/
             │   ├── personality-files.ts
             │   └── linking-codes.ts
             ├── services/         # Service implementations
-            │   ├── account-service.ts  # AccountService + getGoogleSubForBaUser
-            │   └── personality-store.ts # PersonalityStore
+            │   ├── account-service.ts  # AccountService + ensureAccount + deleteAccount
+            │   ├── personality-store.ts # PersonalityStore (load, save, exists, history)
+            │   └── seed.ts       # Default SOUL + IDENTITY seeding
             └── types/            # TypeScript interfaces
                 ├── accounts.ts   # Account, ChannelLink, AccountService
                 └── identity.ts   # PersonalityStore, PersonalityFileType
@@ -175,11 +182,11 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 
 ### apps/agent
 
-| Command                             | Description               |
-| ----------------------------------- | ------------------------- |
-| `pnpm --filter @huginn/agent dev`   | Dev mode with tsx watch   |
-| `pnpm --filter @huginn/agent start` | Run agent                 |
-| `pnpm --filter @huginn/agent build` | Type-check (tsc --noEmit) |
+| Command                             | Description                              |
+| ----------------------------------- | ---------------------------------------- |
+| `pnpm --filter @huginn/agent dev`   | Dev mode with tsx watch (port 4111)      |
+| `pnpm --filter @huginn/agent start` | Run agent                                |
+| `pnpm --filter @huginn/agent build` | Type-check (tsc --noEmit)                |
 
 ---
 
