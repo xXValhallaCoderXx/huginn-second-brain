@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.output/
+
+# TanStack / Vite generated
+.tanstack/
+app.config.timestamp_*
+*.gen.ts
+
+# Turbo
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Drizzle
+drizzle/meta/
+
+# Database files
+*.db
+*.db-journal
+.data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo

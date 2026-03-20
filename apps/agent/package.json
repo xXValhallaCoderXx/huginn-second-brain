@@ -1,0 +1,21 @@
+{
+  "name": "@huginn/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@huginn/shared": "workspace:*",
+    "@mastra/core": "^1.15",
+    "@mastra/libsql": "^1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4"
+  }
+}
