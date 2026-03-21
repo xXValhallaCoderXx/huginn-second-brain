@@ -1,4 +1,4 @@
-import { defineEventHandler, getQuery, sendRedirect } from "h3";
+import { defineEventHandler, getQuery, redirect } from "h3";
 import { config } from "dotenv";
 import { resolve } from "node:path";
 
@@ -14,17 +14,17 @@ export default defineEventHandler(async (event) => {
     const { code, state, error: oauthError } = query;
 
     if (oauthError) {
-        return sendRedirect(event, "/calendars?error=oauth_denied");
+        return redirect("/calendars?error=oauth_denied", 302);
     }
 
     if (!code || !state) {
-        return sendRedirect(event, "/calendars?error=missing_params");
+        return redirect("/calendars?error=missing_params", 302);
     }
 
     // Validate CSRF state
     const stateData = await verifyState(state);
     if (!stateData) {
-        return sendRedirect(event, "/calendars?error=invalid_state");
+        return redirect("/calendars?error=invalid_state", 302);
     }
 
     // Exchange authorization code for tokens
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
 
     if (!tokenRes.ok) {
         console.error("[calendar/callback] Token exchange failed:", await tokenRes.text());
-        return sendRedirect(event, "/calendars?error=token_exchange");
+        return redirect("/calendars?error=token_exchange", 302);
     }
 
     const tokens = (await tokenRes.json()) as {
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
 
     if (!tokens.refresh_token) {
         console.error("[calendar/callback] No refresh_token received — user may need to re-consent");
-        return sendRedirect(event, "/calendars?error=no_refresh_token");
+        return redirect("/calendars?error=no_refresh_token", 302);
     }
 
     // Fetch the user's email for this Google account
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
 
     if (!userinfoRes.ok) {
         console.error("[calendar/callback] Userinfo fetch failed:", await userinfoRes.text());
-        return sendRedirect(event, "/calendars?error=userinfo_failed");
+        return redirect("/calendars?error=userinfo_failed", 302);
     }
 
     const userinfo = (await userinfoRes.json()) as { email: string };
@@ -81,5 +81,5 @@ export default defineEventHandler(async (event) => {
         scopes: tokens.scope,
     });
 
-    return sendRedirect(event, "/calendars?connected=true");
+    return redirect("/calendars?connected=true", 302);
 });
