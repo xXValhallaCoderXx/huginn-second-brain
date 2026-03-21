@@ -13,14 +13,15 @@ Turborepo monorepo with pnpm workspaces:
 | `apps/agent`      | Mastra agent service + Telegram bot (grammY)             | 4111 |
 | `packages/shared` | Drizzle schemas, DB factory, services, TypeScript interfaces | —    |
 
-### Two-Database Design
+### Single-Database Design (Schema Isolation)
 
-| Database   | Stores                                                                   | Accessed By                  |
-| ---------- | ------------------------------------------------------------------------ | ---------------------------- |
-| PostgreSQL | Accounts, channel links, personality files, linking codes, auth sessions | `web` + `agent`              |
-| libSQL     | Threads, messages, working memory (Mastra-managed)                       | `agent` only via Mastra APIs |
+| Schema   | Stores                                                                   | Managed By                   |
+| -------- | ------------------------------------------------------------------------ | ---------------------------- |
+| `public` | Accounts, channel links, personality files, linking codes, auth sessions | Drizzle migrations (app)     |
+| `mastra` | Threads, messages, working memory, observations, reflections             | Mastra auto-migration (`PostgresStore.init()`) |
+| `public` | Vector embeddings for semantic recall (`PgVector` auto-managed tables)  | PgVector auto-migration                        |
 
-**Bridge**: `accounts.id` (UUID) = Mastra `resourceId`. Never query Mastra's libSQL directly.
+**Bridge**: `accounts.id` (UUID) = Mastra `resourceId`. App code never queries `mastra.*` tables directly. Mastra never touches `public.*` tables.
 
 ## Build & Dev
 
@@ -35,6 +36,7 @@ pnpm build                            # Build all
 pnpm lint                             # ESLint all
 pnpm db:generate                      # Generate Drizzle migrations
 pnpm db:studio                        # Drizzle Studio GUI
+pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to agent API on 4111)
 ```
 
 ## Code Conventions
@@ -58,6 +60,7 @@ pnpm db:studio                        # Drizzle Studio GUI
 - `channel_links` — FK to accounts, `provider` + `providerUserId` with two unique composite indexes
 - `personality_files` — append-only versioning (INSERT with incremented `version`, never UPDATE)
 - `linking_codes` — one-time codes with 10min expiry, `used` boolean flag
+- `calendar_connections` — OAuth tokens (AES-256-GCM encrypted), FK to accounts, unique on (accountId, provider, providerEmail)
 - `user`, `session`, `account`, `verification` — Better Auth tables (schema in `auth.ts`)
 
 ### Service Implementations — packages/shared/src/services/
@@ -69,11 +72,18 @@ pnpm db:studio                        # Drizzle Studio GUI
 - `createPersonalityStore(db)` — implements `PersonalityStore` (load, save, exists, history)
 - `seedNewAccount(db, accountId)` — seeds default SOUL + IDENTITY personality files
 - `verifyAndConsumeLinkingCode(db, code)` — atomic verify + consume (race-condition safe)
+- `createCalendarConnectionService(db)` — CRUD for calendar_connections (encrypts tokens at rest)
+- `createCalendarService(db)` — aggregates events across providers, auto-refreshes tokens, deduplicates
+- `googleCalendarProvider` — Google Calendar API v3 HTTP client (no googleapis SDK)
+- `encryptToken(plaintext)` / `decryptToken(encrypted)` — AES-256-GCM token encryption
 
 ### Interface Contracts — packages/shared/src/types/
 
 - `AccountService` — 9 methods for accounts, channel links, linking codes
 - `PersonalityStore` — `load()` (latest version), `save()` (insert new), `exists()`, `history()`
+- `CalendarService` — `getEvents(accountId, range)`, `formatForContext(events)` — aggregation + context formatting
+- `CalendarConnectionService` — CRUD for encrypted calendar OAuth connections
+- `CalendarProvider` — plugin interface (getEvents, refreshTokens) for each calendar provider
 - Return `null` for not-found, don't throw
 
 ### TanStack Start Patterns (apps/web)
@@ -109,13 +119,33 @@ pnpm db:studio                        # Drizzle Studio GUI
 ### Mastra Patterns (apps/agent)
 
 - Agent HTTP server uses Hono + `@mastra/hono` on port 4111
-- `LibSQLStore` **requires** `id` parameter: `new LibSQLStore({ id: "huginn-storage", url: ... })`
+- `PostgresStore` from `@mastra/pg` — shared storage in `src/mastra/storage.ts`, used by both Mastra instance and agent Memory
+- `PostgresStore` uses `schemaName: "mastra"` to isolate Mastra tables from app tables in the same PostgreSQL database
 - Mastra singleton in `src/mastra/index.ts`, imported by entry point
 - Agent definition in `src/mastra/agents/huginn.ts` — dynamic instructions via `requestContext`
 - `requestContext` (NOT `runtimeContext`) carries `account-id` and `personality-store` per request
-- `@mastra/memory` installed separately from `@mastra/core`; memory inherits storage from Mastra instance
-- Thread ID convention for Telegram: `tg-chat-${chatId}`, for web: `chat-${accountId}-${timestamp}`
+- `@mastra/memory` installed separately from `@mastra/core`; Memory uses explicit `storage` from `storage.ts`
+- **Semantic Recall** enabled — RAG-based vector search across past conversations using `PgVector` + `ModelRouterEmbeddingModel` (`openrouter/openai/text-embedding-3-small`)
+- Semantic recall config: `topK: 3`, `messageRange: 2`, `scope: 'resource'` (cross-thread search)
+- `PgVector` reuses the same PostgreSQL database (`APP_DATABASE_URL`); auto-creates vector tables in `public` schema
+- **Observational Memory** enabled with `openrouter/google/gemini-2.5-flash`, thread scope, default thresholds (30k observe, 40k reflect)
 - Working memory scoped to `resourceId` (= `accounts.id`), persists across threads
+- Observational Memory scoped to thread — deep recall within a conversation
+- Thread ID convention for Telegram: `tg-chat-${chatId}`, for web: `chat-${accountId}-${timestamp}`
+- `MastraServer` from `@mastra/hono` registers Mastra API routes at `/api/*` via `server.init()`
+- CORS enabled on `/api/*` (plus `/chat/*`, `/telegram/*`) for Studio (port 3001) and web app (port 3000)
+- `instructions` callback guards against missing `requestContext` — returns `BASE_INSTRUCTIONS` as fallback when Studio introspects the agent
+- **Mastra Studio**: Use `mastra studio --server-port 4111 --port 3001` for server-adapter projects. Do NOT use `mastra dev` — it creates a separate isolated server and ignores the Hono adapter setup
+
+### Calendar Integration Patterns
+
+- **Separate OAuth from auth**: Calendar OAuth uses same `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` but requests `calendar.readonly` scope separately from Better Auth sign-in
+- **Encrypted tokens**: All OAuth tokens stored with AES-256-GCM encryption (`CALENDAR_ENCRYPTION_KEY` env var). Encryption/decryption happens in `CalendarConnectionService`, transparent to callers
+- **HMAC-signed state**: OAuth state parameter is HMAC-SHA256 signed with `BETTER_AUTH_SECRET`, 10min expiry, prevents CSRF
+- **OAuth callback**: Nitro server route at `/api/calendar/callback` — exchanges code, fetches userinfo email, stores connection
+- **Context injection**: `buildInstructions()` injects today's calendar into the agent system prompt (5min in-memory cache)
+- **On-demand tool**: `get-calendar` Mastra tool lets the agent query arbitrary date ranges when users ask about their schedule
+- **Provider plugin**: `CalendarProvider` interface allows future providers (Outlook, etc.) without changing service layer
 
 ### Telegram Bot Patterns (apps/agent)
 
@@ -139,6 +169,9 @@ pnpm db:studio                        # Drizzle Studio GUI
 - **Telegram user IDs are numbers, stored as text**: Convert with `String(telegramUserId)` before storing.
 - **`pnpm dev` blocks the shell** (`persistent: true` in turbo.json). Use separate terminals or filter to individual apps.
 - `*.gen.ts` files are gitignored. If routing breaks, restart the dev server.
+- **`.mastra/` is gitignored**: Mastra build/output directory generated by `mastra dev`/`mastra studio`. Don't commit it.
+- **Docker PostgreSQL requires pgvector**: Image is `pgvector/pgvector:pg16` (NOT `postgres:16-alpine`). Required for `PgVector` semantic recall. If you see `extension "vector" does not exist`, recreate the container with the correct image.
+- **`zod@4` as direct dependency in `@huginn/agent`**: Mastra's internal modules mix `import from 'zod'` and `import from 'zod/v4'`. With `zod@3.25.x` (v4's v3 compat shim) those resolve to different APIs causing `_parse is not a function` crashes. Pin to `^4.3.6` so both imports resolve to the same v4 API.
 
 ## Key Files
 
@@ -158,30 +191,42 @@ pnpm db:studio                        # Drizzle Studio GUI
 - [apps/agent/src/telegram/handlers.ts](apps/agent/src/telegram/handlers.ts) — /start, /link, message routing handlers
 - [apps/agent/src/mastra/agents/huginn.ts](apps/agent/src/mastra/agents/huginn.ts) — Agent definition with dynamic personality
 - [apps/agent/src/identity/instructions.ts](apps/agent/src/identity/instructions.ts) — buildInstructions() personality injection
+- [apps/agent/src/mastra/storage.ts](apps/agent/src/mastra/storage.ts) — PostgresStore shared instance (mastra schema)
 - [apps/agent/src/mastra/index.ts](apps/agent/src/mastra/index.ts) — Mastra instance config
+- [apps/agent/src/mastra/tools/get-calendar.ts](apps/agent/src/mastra/tools/get-calendar.ts) — Calendar lookup tool for the agent
+- [apps/agent/src/calendar-cache.ts](apps/agent/src/calendar-cache.ts) — In-memory 5min TTL cache for calendar events
+- [apps/web/src/components/calendars-page.tsx](apps/web/src/components/calendars-page.tsx) — Calendar connections management page
+- [apps/web/server/api/calendar/callback.ts](apps/web/server/api/calendar/callback.ts) — Google Calendar OAuth callback (Nitro route)
+- [packages/shared/src/services/calendar-service.ts](packages/shared/src/services/calendar-service.ts) — CalendarService (event aggregation + context formatting)
+- [packages/shared/src/services/calendar-connection-service.ts](packages/shared/src/services/calendar-connection-service.ts) — Calendar connection CRUD (encrypted tokens)
+- [packages/shared/src/services/crypto.ts](packages/shared/src/services/crypto.ts) — AES-256-GCM encryption utilities
 - [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation (all methods)
 
 ## Milestones
 
-Current: **M3 complete** (Telegram bot, channel linking, deep link UX). Next milestones from spec:
+Current: **Phase 2 complete** (Storage migration + Observational Memory). Next milestones from spec:
 
 - ~~**M0**: Scaffolding, schemas, both apps boot~~ ✅
 - ~~**M1**: Better Auth + Google OAuth, account creation, session middleware~~ ✅
 - ~~**M2**: Personality files CRUD (web UI), dynamic instructions, streaming chat~~ ✅
 - ~~**M3**: Telegram bot (grammY), channel linking, deep link + QR code UX~~ ✅
-- **M4**: Working memory, conversation quality, full smoke test
-
-See `sovereign-architecture-spec.md` § Build Milestones for acceptance criteria.
+- ~~**M4**: Working memory, conversation quality, full smoke test~~ ✅
+- ~~**Phase 2 — M2.0**: Storage migration (libSQL → PostgreSQL, `mastra` schema)~~ ✅
+- ~~**Phase 2 — M2.1**: Observational Memory (thread-scoped, Gemini 2.5 Flash)~~ ✅
+- ~~**Calendar Integration**: Google Calendar OAuth, encrypted token storage, context injection, Mastra tool~~ ✅
+- **Phase 3**: Personality refinement workflow (OM → SOUL.md/IDENTITY.md evolution)
 
 ## Environment Variables
 
 | Variable               | Required                         | Used By            |
 | ---------------------- | -------------------------------- | ------------------ |
-| `APP_DATABASE_URL`     | Yes                              | shared, web, agent |
-| `MASTRA_DATABASE_URL`  | No (defaults `file:./mastra.db`) | agent              |
+| `APP_DATABASE_URL`     | Yes                              | shared, web, agent (app + Mastra) |
 | `OPENROUTER_API_KEY`   | M2+                              | agent              |
 | `TELEGRAM_BOT_TOKEN`   | M3+                              | agent              |
 | `GOOGLE_CLIENT_ID`     | M1+                              | web                |
 | `GOOGLE_CLIENT_SECRET` | M1+                              | web                |
 | `BETTER_AUTH_SECRET`   | M1+                              | web                |
 | `APP_URL`              | M1+                              | web                |
+| `CALENDAR_ENCRYPTION_KEY` | Calendar feature                 | shared (crypto)    |
+
+`CALENDAR_ENCRYPTION_KEY` must be a 64-character hex string (32 bytes). Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`

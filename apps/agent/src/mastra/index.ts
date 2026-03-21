@@ -1,11 +1,19 @@
 import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
+import { Observability, DefaultExporter } from "@mastra/observability";
 import { huginnAgent } from "./agents/huginn.js";
+import { storage } from "./storage.js";
+import { getCalendarTool } from "./tools/get-calendar.js";
 
 export const mastra = new Mastra({
     agents: { huginn: huginnAgent },
-    storage: new LibSQLStore({
-        id: "huginn-storage",
-        url: process.env.MASTRA_DATABASE_URL ?? "file:./mastra.db",
+    tools: { "get-calendar": getCalendarTool },
+    storage,
+    observability: new Observability({
+        configs: {
+            default: {
+                serviceName: "huginn",
+                exporters: [new DefaultExporter()],
+            },
+        },
     }),
 });
