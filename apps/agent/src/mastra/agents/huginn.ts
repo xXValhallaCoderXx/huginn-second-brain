@@ -1,5 +1,7 @@
 import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { Memory } from "@mastra/memory";
+import { PgVector } from "@mastra/pg";
 import type { PersonalityStore } from "@huginn/shared";
 import {
     BASE_INSTRUCTIONS,
@@ -7,6 +9,16 @@ import {
     WORKING_MEMORY_TEMPLATE,
 } from "../../identity/instructions.js";
 import { storage } from "../storage.js";
+
+const vector = new PgVector({
+    id: "huginn-vector",
+    connectionString: process.env.APP_DATABASE_URL!,
+});
+
+const embedder = new ModelRouterEmbeddingModel({
+    providerId: "openrouter",
+    modelId: "openai/text-embedding-3-small",
+});
 
 export type HuginnContext = {
     "account-id": string;
@@ -29,8 +41,15 @@ export const huginnAgent = new Agent({
 
     memory: new Memory({
         storage,
+        vector,
+        embedder,
         options: {
             lastMessages: 15,
+            semanticRecall: {
+                topK: 3,
+                messageRange: 2,
+                scope: "resource",
+            },
             workingMemory: {
                 enabled: true,
                 scope: "resource",

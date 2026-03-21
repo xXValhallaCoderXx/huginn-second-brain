@@ -16,14 +16,15 @@ Huginn is a monorepo with two apps and a shared package:
 | `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, channel handling  |
 | `packages/shared` | Drizzle schemas, DB connection factory, services, TypeScript interfaces    |
 
-**Two databases, strict boundary:**
+**Single database, schema isolation:**
 
-| Database   | Owns                                                                     | Accessed By                |
-| ---------- | ------------------------------------------------------------------------ | -------------------------- |
-| PostgreSQL | Accounts, channel links, personality files, auth sessions, linking codes | `apps/web` + `apps/agent`  |
-| libSQL     | Threads, messages, working memory                                        | `apps/agent` (Mastra only) |
+| Schema   | Stores                                                                   | Managed By                   |
+| -------- | ------------------------------------------------------------------------ | ---------------------------- |
+| `public` | Accounts, channel links, personality files, linking codes, auth sessions | Drizzle migrations (app)     |
+| `mastra` | Threads, messages, working memory, observations, reflections             | Mastra auto-migration        |
+| `public` | Vector embeddings for semantic recall                                    | PgVector auto-migration      |
 
-The bridge between them is `accounts.id` (UUID) — used as `resourceId` in Mastra.
+The bridge between schemas is `accounts.id` (UUID) — used as Mastra `resourceId`.
 
 ---
 
@@ -75,7 +76,7 @@ huginn-second-brain/
 │           │   ├── bot.ts        # grammY bot factory (auto-discovers username)
 │           │   └── handlers.ts   # /start, /link, message routing handlers
 │           └── mastra/
-│               ├── index.ts      # Mastra instance + LibSQL storage
+│               ├── index.ts      # Mastra instance + PostgreSQL storage
 │               └── agents/
 │                   └── huginn.ts # Agent definition (dynamic instructions, memory)
 │
@@ -127,7 +128,6 @@ Edit `.env` with your values. For local development, the defaults work with Dock
 
 ```env
 APP_DATABASE_URL=postgresql://huginn:huginn@localhost:5432/huginn
-MASTRA_DATABASE_URL=file:./mastra.db
 ```
 
 ### 3. Start PostgreSQL
@@ -205,7 +205,7 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | App database    | PostgreSQL (Docker locally, Railway in prod) |
 | ORM             | Drizzle                                      |
 | Agent framework | Mastra                                       |
-| Agent memory    | Mastra Memory + libSQL                       |
+| Agent memory    | Mastra Memory + PostgreSQL (`mastra` schema) |
 | LLM routing     | OpenRouter (Claude Sonnet 4)                 |
 | Telegram        | grammY                                       |
 | Runtime         | Node.js 22+                                  |
@@ -218,7 +218,6 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | Variable               | Used By            | Description                                  |
 | ---------------------- | ------------------ | -------------------------------------------- |
 | `APP_DATABASE_URL`     | shared, web, agent | PostgreSQL connection string                 |
-| `MASTRA_DATABASE_URL`  | agent              | libSQL URL (`file:./mastra.db` or Turso URL) |
 | `OPENROUTER_API_KEY`   | agent              | LLM provider key                             |
 | `TELEGRAM_BOT_TOKEN`   | agent              | grammY bot token                             |
 | `GOOGLE_CLIENT_ID`     | web                | Google OAuth client ID                       |

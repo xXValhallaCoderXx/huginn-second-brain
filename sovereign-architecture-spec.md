@@ -43,18 +43,27 @@ The POC exists to prove this architecture works end-to-end. Every decision in th
 │  │                        │  │                        │            │
 │  └───────────┬────────────┘  └───────────┬────────────┘            │
 │              │                           │                         │
-│              │     ┌─────────────────┐   │    ┌──────────────┐    │
-│              └────►│  PostgreSQL      │◄──┘    │  libSQL      │    │
-│                    │  (Railway)       │        │  (Mastra     │    │
-│                    │                  │        │   internals) │    │
-│                    │  - accounts      │        │              │    │
-│                    │  - channel_links │        │  - threads   │    │
-│                    │  - personality   │        │  - messages  │    │
-│                    │    _files        │        │  - working   │    │
-│                    │  - linking_codes │        │    memory    │    │
-│                    │  - better_auth   │        │              │    │
-│                    │    tables        │        └──────────────┘    │
-│                    └─────────────────┘                             │
+│              │     ┌─────────────────┐   │                                │
+│              └────►│  PostgreSQL      │◄──┘                                │
+│                    │  (Railway)       │                                     │
+│                    │                  │                                     │
+│                    │  public schema:  │                                     │
+│                    │  - accounts      │                                     │
+│                    │  - channel_links │                                     │
+│                    │  - personality   │                                     │
+│                    │    _files        │                                     │
+│                    │  - linking_codes │                                     │
+│                    │  - better_auth   │                                     │
+│                    │    tables        │                                     │
+│                    │  - vector embeds │                                     │
+│                    │                  │                                     │
+│                    │  mastra schema:  │                                     │
+│                    │  - threads       │                                     │
+│                    │  - messages      │                                     │
+│                    │  - working_memory│                                     │
+│                    │  - observations  │                                     │
+│                    │  - reflections   │                                     │
+│                    └─────────────────┘                                     │
 │                                                                    │
 │  ┌────────────────────────────────────────┐                       │
 │  │   packages/shared                       │                       │
@@ -67,14 +76,15 @@ The POC exists to prove this architecture works end-to-end. Every decision in th
 
 ### 2.3 Key Architectural Principle
 
-**Two databases, strict boundary:**
+**Single database, schema isolation:**
 
-| Database   | Owns                                                                     | Accessed By                | Purpose          |
-| ---------- | ------------------------------------------------------------------------ | -------------------------- | ---------------- |
-| PostgreSQL | Accounts, channel links, personality files, auth sessions, linking codes | `apps/web` + `apps/agent`  | App-level data   |
-| libSQL     | Threads, messages, working memory                                        | `apps/agent` (Mastra only) | Mastra internals |
+| Schema   | Stores                                                                   | Managed By                   | Purpose                    |
+| -------- | ------------------------------------------------------------------------ | ---------------------------- | -------------------------- |
+| `public` | Accounts, channel links, personality files, auth sessions, linking codes | Drizzle migrations (app)     | App-level data             |
+| `mastra` | Threads, messages, working memory, observations, reflections             | Mastra auto-migration        | Mastra internals           |
+| `public` | Vector embeddings for semantic recall                                    | PgVector auto-migration      | Semantic recall (RAG)      |
 
-The bridge between them is a single value: **`account.id`** (UUID). In the app database, this is the primary key on `accounts`. In Mastra, this same value is passed as `resourceId`. We never query Mastra's libSQL directly — we use Mastra's APIs.
+The bridge between schemas is a single value: **`account.id`** (UUID). In the `public` schema, this is the primary key on `accounts`. In the `mastra` schema, this same value is passed as `resourceId`. App code never queries `mastra.*` tables directly — we use Mastra’s APIs.
 
 ---
 
@@ -88,7 +98,7 @@ The bridge between them is a single value: **`account.id`** (UUID). In the app d
 | **App database**    | PostgreSQL             | Railway-managed instance                                          |
 | **ORM**             | Drizzle                | Type-safe queries, migrations, Better Auth adapter                |
 | **Agent framework** | Mastra                 | TypeScript, dynamic instructions, working memory                  |
-| **Agent memory**    | Mastra Memory + libSQL | Working memory (resource-scoped), message history (thread-scoped) |
+| **Agent memory**    | Mastra Memory + PostgreSQL | Working memory (resource-scoped), observational memory (thread-scoped), semantic recall (resource-scoped) |
 | **LLM routing**     | OpenRouter             | `anthropic/claude-sonnet-4` via OpenRouter                        |
 | **Telegram**        | grammY                 | Bot API framework                                                 |
 | **Runtime**         | Node.js 22+            | Both services                                                     |
@@ -578,9 +588,10 @@ export const HuginnAgent = new Agent({
   },
 
   memory: new Memory({
-    storage: new LibSQLStore({
-      id: "Huginn-memory",
-      url: process.env.MASTRA_DATABASE_URL!,
+    storage: new PostgresStore({
+      id: "huginn-storage",
+      connectionString: process.env.APP_DATABASE_URL!,
+      schemaName: "mastra",
     }),
     options: {
       lastMessages: 15,
@@ -726,7 +737,6 @@ This means:
 APP_DATABASE_URL=postgresql://user:pass@host:5432/Huginn   # PostgreSQL connection string
 
 # ─── Agent (apps/agent) ───
-MASTRA_DATABASE_URL=file:./mastra.db       # libSQL for Mastra internals (local file or Turso URL)
 OPENROUTER_API_KEY=sk-or-...               # LLM provider
 TELEGRAM_BOT_TOKEN=123456:ABC-...          # grammY bot token
 
@@ -771,14 +781,13 @@ services:
       dockerfile: apps/agent/Dockerfile
     environment:
       - APP_DATABASE_URL
-      - MASTRA_DATABASE_URL
       - OPENROUTER_API_KEY
       - TELEGRAM_BOT_TOKEN
     depends_on:
       - postgres
 
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     environment:
       - POSTGRES_USER=Huginn
       - POSTGRES_PASSWORD=Huginn
