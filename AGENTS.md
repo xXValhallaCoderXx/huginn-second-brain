@@ -156,10 +156,22 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - grammY bot in `src/telegram/bot.ts` — factory pattern, opt-in via `TELEGRAM_BOT_TOKEN`
 - Bot username auto-discovered via `bot.init()` (`getMe` API) — no env var needed
 - `GET /telegram/info` endpoint exposes `{ username }` to the web app for deep link URLs
-- Handlers in `src/telegram/handlers.ts`: `/start` (deep link payload), `/link CODE` (fallback), message routing
+- Handlers in `src/telegram/handlers.ts`: `/start` (deep link payload), `/link CODE` (fallback), `/brief` (on-demand daily briefing), message routing
 - Deep link format: `https://t.me/BOT_USERNAME?start=LINK-CODE` — Telegram sends `/start LINK-CODE` to bot
 - `verifyAndConsumeLinkingCode` used for atomic race-condition-safe linking
 - Long polling mode with graceful shutdown on SIGINT/SIGTERM
+
+### Daily Briefing Workflow (apps/agent)
+
+- **On-demand** via `/brief` Telegram command — user types `/brief` and gets a personalized morning briefing
+- **Mastra Workflow** pattern: single `daily-briefing` workflow processes one account: fetch-calendar → query-memory → generate-briefing → send-telegram
+- **Triggered from handler**: `/brief` command in `handlers.ts` resolves the account, creates `RequestContext`, and runs the workflow
+- **Dependency injection** via `RequestContext` — handler injects `db`, `calendar-service`, `personality-store`, `account-service` before `run.start()`
+- **Memory query**: Uses `memory.recall()` with `vectorSearchString` per event title, `scope: 'resource'` for cross-thread search, synthetic `threadId` (required param)
+- **Personality injection**: `generate-briefing` step creates per-account `RequestContext` with `account-id` + `personality-store` + `calendar-service` so `buildInstructions()` loads SOUL + IDENTITY
+- **Telegram delivery**: `send-telegram` step uses `getBot()` singleton import, retries without Markdown on parse errors
+- **Dry run mode**: `DAILY_BRIEF_DRY_RUN=true` logs briefing to console instead of sending to Telegram
+- **Workflow visible in Mastra Studio** Workflows tab — runs are inspectable per step
 
 ## Gotchas
 
@@ -192,7 +204,7 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - [apps/web/src/components/channels-page.tsx](apps/web/src/components/channels-page.tsx) — Connected channels management page component
 - [apps/agent/src/index.ts](apps/agent/src/index.ts) — Hono HTTP server (/chat, /chat/stream, /telegram/info)
 - [apps/agent/src/telegram/bot.ts](apps/agent/src/telegram/bot.ts) — grammY bot factory with auto-discovered username
-- [apps/agent/src/telegram/handlers.ts](apps/agent/src/telegram/handlers.ts) — /start, /link, message routing handlers
+- [apps/agent/src/telegram/handlers.ts](apps/agent/src/telegram/handlers.ts) — /start, /link, /brief, message routing handlers
 - [apps/agent/src/mastra/agents/huginn.ts](apps/agent/src/mastra/agents/huginn.ts) — Agent definition with dynamic personality
 - [apps/agent/src/identity/instructions.ts](apps/agent/src/identity/instructions.ts) — buildInstructions() personality injection
 - [apps/agent/src/mastra/storage.ts](apps/agent/src/mastra/storage.ts) — PostgresStore shared instance (mastra schema)
@@ -205,6 +217,7 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - [packages/shared/src/services/calendar-connection-service.ts](packages/shared/src/services/calendar-connection-service.ts) — Calendar connection CRUD (encrypted tokens)
 - [packages/shared/src/services/crypto.ts](packages/shared/src/services/crypto.ts) — AES-256-GCM encryption utilities
 - [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation (all methods)
+- [apps/agent/src/workflows/daily-briefing.ts](apps/agent/src/workflows/daily-briefing.ts) — Daily briefing Mastra workflow (4 steps: calendar → memory → generate → send)
 
 ## Milestones
 
@@ -218,6 +231,7 @@ Current: **Phase 2 complete** (Storage migration + Observational Memory). Next m
 - ~~**Phase 2 — M2.0**: Storage migration (libSQL → PostgreSQL, `mastra` schema)~~ ✅
 - ~~**Phase 2 — M2.1**: Observational Memory (thread-scoped, Gemini 2.5 Flash)~~ ✅
 - ~~**Calendar Integration**: Google Calendar OAuth, encrypted token storage, context injection, Mastra tool~~ ✅
+- ~~**Daily Briefing**: On-demand `/brief` command, calendar + semantic memory + LLM generation + Telegram delivery~~ ✅
 - **Phase 3**: Personality refinement workflow (OM → SOUL.md/IDENTITY.md evolution)
 
 ## Environment Variables
@@ -232,5 +246,6 @@ Current: **Phase 2 complete** (Storage migration + Observational Memory). Next m
 | `BETTER_AUTH_SECRET`   | M1+                              | web                |
 | `APP_URL`              | M1+                              | web                |
 | `CALENDAR_ENCRYPTION_KEY` | Calendar feature                 | shared (crypto)    |
+| `DAILY_BRIEF_DRY_RUN`    | Daily briefing (default: `false`)  | agent              |
 
 `CALENDAR_ENCRYPTION_KEY` must be a 64-character hex string (32 bytes). Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`

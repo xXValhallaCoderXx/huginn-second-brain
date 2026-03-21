@@ -69,6 +69,54 @@ export function registerHandlers(bot: Bot, deps: HandlerDeps): void {
         await handleLinkCode(ctx, code);
     });
 
+    // /brief command — on-demand daily briefing
+    bot.command("brief", async (ctx) => {
+        const telegramUserId = String(ctx.from?.id);
+        const account = await accountService.resolveAccountFromChannel("telegram", telegramUserId);
+
+        if (!account) {
+            await ctx.reply(
+                "I don't recognise this Telegram account yet.\n" +
+                "Link your account first, then try /brief again.",
+            );
+            return;
+        }
+
+        await ctx.replyWithChatAction("typing");
+        const typingInterval = setInterval(() => {
+            ctx.replyWithChatAction("typing").catch(() => {});
+        }, 4000);
+
+        try {
+            const workflow = mastra.getWorkflow("daily-briefing");
+            const run = await workflow.createRun();
+
+            const requestContext = new RequestContext();
+            requestContext.set("db", db);
+            requestContext.set("calendar-service", calendarService);
+            requestContext.set("personality-store", personalityStore);
+            requestContext.set("account-service", accountService);
+
+            const result = await run.start({
+                inputData: {
+                    accountId: account.id,
+                    telegramChatId: String(ctx.chat.id),
+                },
+                requestContext,
+            });
+
+            if (result.status !== "success") {
+                console.error("[brief] Workflow failed:", result.status);
+                await ctx.reply("Sorry, I couldn't generate your briefing right now. Try again in a moment.");
+            }
+        } catch (error) {
+            console.error("[brief] Error running briefing workflow:", error);
+            await ctx.reply("Something went wrong generating your briefing. Please try again.");
+        } finally {
+            clearInterval(typingInterval);
+        }
+    });
+
     // Regular messages — route to Huginn agent
     bot.on("message:text", async (ctx) => {
         const telegramUserId = String(ctx.from?.id);
