@@ -13,6 +13,7 @@ import { telegramRoutes } from './routes/telegram-routes.js';
 import { genericAgent } from './agents/generic-agent.js';
 import { sovereignAgent } from './agents/sovereign.js';
 import { weatherWorkflow } from './workflows/weather-workflow.js';
+import { dailyBriefingWorkflow } from './workflows/daily-briefing-workflow.js';
 import { weatherAgent } from './agents/weather-agent.js';
 
 const packageRoot = getPackageRoot(import.meta.url);
@@ -29,7 +30,7 @@ initPersonalityStore(personalityClient);
 await runMigrations(personalityClient);
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
+  workflows: { weatherWorkflow, dailyBriefingWorkflow },
   agents: { genericAgent, weatherAgent, sovereign: sovereignAgent },
   server: {
     apiRoutes: telegramRoutes,

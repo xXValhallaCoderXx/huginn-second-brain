@@ -4,6 +4,7 @@ import { type HonoBindings, type HonoVariables, MastraServer } from '@mastra/hon
 import { loadEnvironment } from './config/load-env.js'
 import { getServerPort } from './config/runtime.js'
 import { mastra } from './mastra/index.js'
+import { startScheduler } from './scheduler.js'
 
 loadEnvironment(import.meta.url)
 
@@ -23,4 +24,5 @@ serve({
   hostname: '0.0.0.0'
 }, (info) => {
   console.log(`Server is running on http://localhost:${info.port}`)
+  void startScheduler(mastra)
 })

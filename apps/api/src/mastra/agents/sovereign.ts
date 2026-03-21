@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { buildInstructions } from '../../identity/instructions.js';
 import { getPersonalityStore } from '../../identity/store.js';
+import { calendarTool } from '../tools/calendar-tool.js';
 
 const WORKING_MEMORY_TEMPLATE = `# Active Context
 - Current focus/priority:
@@ -19,6 +20,7 @@ export const sovereignAgent = new Agent({
         return buildInstructions(resourceId ?? 'unknown', getPersonalityStore());
     },
     model: 'openrouter/openai/gpt-5-mini',
+    tools: { calendarTool },
     memory: new Memory({
         options: {
             workingMemory: {
