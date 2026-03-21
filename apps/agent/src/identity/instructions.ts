@@ -23,8 +23,9 @@ export const BASE_INSTRUCTIONS = `You are Huginn, a personal AI assistant.
 ## Calendar
 - Your calendar context (if present above) shows today's events the user
   has connected. Reference it naturally when relevant.
-- You can also use the get_calendar tool to look up events for a specific
-  date range when the user asks about their schedule.`;
+- ONLY use the get-calendar tool when the user explicitly asks about their
+  schedule, meetings, or availability for specific dates. Never call it
+  during normal conversation.`;
 
 export const WORKING_MEMORY_TEMPLATE = `# Active Context
 
@@ -44,7 +45,7 @@ export async function buildInstructions(
     store.load(accountId, "IDENTITY"),
   ]);
 
-  const hasPersonality = soul !== null || identity !== null;
+  // const hasPersonality = soul !== null || identity !== null;
   console.log(`[buildInstructions] accountId=${accountId} hasSOUL=${soul !== null} hasIDENTITY=${identity !== null}`);
 
   let calendarBlock = "";
@@ -67,7 +68,17 @@ export async function buildInstructions(
     }
   }
 
-  return [soul, identity, calendarBlock, BASE_INSTRUCTIONS]
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+  const dateContext = `Today is ${dateStr}.`;
+
+  return [soul, identity, calendarBlock, dateContext, BASE_INSTRUCTIONS]
     .filter(Boolean)
     .join("\n\n---\n\n");
 }

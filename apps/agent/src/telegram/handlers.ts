@@ -92,14 +92,71 @@ export function registerHandlers(bot: Bot, deps: HandlerDeps): void {
         requestContext.set("calendar-service", calendarService);
 
         try {
-            const response = await agent.generate(ctx.message.text, {
+            const result = await agent.stream(ctx.message.text, {
                 requestContext,
                 memory: {
                     resource: account.id,
                     thread: threadId,
                 },
             });
-            await ctx.reply(response.text);
+
+            // Show native "typing..." indicator while buffering initial tokens
+            await ctx.replyWithChatAction("typing");
+            const typingInterval = setInterval(() => {
+                ctx.replyWithChatAction("typing").catch(() => { });
+            }, 4000);
+
+            let buffer = "";
+            let msgId: number | null = null;
+            let lastEdit = 0;
+            const THROTTLE_MS = 1500;
+            const FIRST_CHUNK_MIN = 50; // chars before sending first visible message
+
+            const reader = result.textStream.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += value;
+
+                // Phase 1: Still showing typing indicator, buffer until we have enough text
+                if (msgId === null) {
+                    if (buffer.trim().length >= FIRST_CHUNK_MIN) {
+                        clearInterval(typingInterval);
+                        const sent = await ctx.reply(buffer);
+                        msgId = sent.message_id;
+                        lastEdit = Date.now();
+                    }
+                    continue;
+                }
+
+                // Phase 2: Edit-in-place with throttled updates
+                const now = Date.now();
+                if (now - lastEdit >= THROTTLE_MS) {
+                    try {
+                        await ctx.api.editMessageText(ctx.chat.id, msgId, buffer);
+                        lastEdit = now;
+                    } catch {
+                        // Telegram rejects edits if text hasn't changed — safe to ignore
+                    }
+                }
+            }
+
+            clearInterval(typingInterval);
+
+            // Final message: either edit existing or send what we have
+            if (msgId !== null && buffer.trim()) {
+                try {
+                    await ctx.api.editMessageText(ctx.chat.id, msgId, buffer);
+                } catch {
+                    // Already up to date
+                }
+            } else if (buffer.trim()) {
+                // Stream ended before hitting FIRST_CHUNK_MIN (short reply)
+                await ctx.reply(buffer);
+            } else {
+                await ctx.reply("I had nothing to say — try again?");
+            }
         } catch (err) {
             console.error("[telegram] Error generating response:", err);
             await ctx.reply("Sorry, I had trouble processing that. Please try again.");

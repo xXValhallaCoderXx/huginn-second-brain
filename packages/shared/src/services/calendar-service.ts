@@ -65,6 +65,7 @@ export function createCalendarService(db: Database): CalendarService {
 
             const events: CalendarEvent[] = [];
             const seen = new Set<string>();
+            const errors: Error[] = [];
 
             for (const result of results) {
                 if (result.status === "fulfilled") {
@@ -80,7 +81,20 @@ export function createCalendarService(db: Database): CalendarService {
                         "[CalendarService] Provider fetch failed:",
                         result.reason,
                     );
+                    errors.push(
+                        result.reason instanceof Error
+                            ? result.reason
+                            : new Error(String(result.reason)),
+                    );
                 }
+            }
+
+            // If every connection failed, throw so callers can distinguish
+            // "empty calendar" from "all providers errored"
+            if (errors.length > 0 && errors.length === connections.length) {
+                throw new Error(
+                    `All calendar providers failed: ${errors[0].message}`,
+                );
             }
 
             events.sort((a, b) => a.start.getTime() - b.start.getTime());
