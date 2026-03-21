@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 2 complete — Calendar integration, Observational Memory, Semantic Recall, Mastra Studio observability
+> **Status**: Phase 2 complete — Calendar integration, Observational Memory, Semantic Recall, Daily Briefing (`/brief`), Mastra Studio observability
 
 ---
 
@@ -13,7 +13,7 @@ Huginn is a monorepo with two apps and a shared package:
 | Package           | Description                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- |
 | `apps/web`        | TanStack Start (React) web dashboard — auth, linking, personality, calendar management |
-| `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, calendar tools, channel handling  |
+| `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, calendar tools, daily briefing, channel handling  |
 | `packages/shared` | Drizzle schemas, DB connection factory, services, TypeScript interfaces    |
 
 **Single database, schema isolation:**
@@ -83,7 +83,7 @@ huginn-second-brain/
 │           │   └── instructions.ts # buildInstructions() — personality + calendar + date injection
 │           ├── telegram/
 │           │   ├── bot.ts        # grammY bot factory (auto-discovers username)
-│           │   └── handlers.ts   # /start, /link, message routing handlers
+│           │   └── handlers.ts   # /start, /link, /brief, message routing handlers
 │           └── mastra/
 │               ├── index.ts      # Mastra instance (storage, observability, tools)
 │               ├── storage.ts    # PostgresStore shared instance (mastra schema)
@@ -91,6 +91,9 @@ huginn-second-brain/
 │               │   └── get-calendar.ts # Calendar lookup tool (period-based + date range)
 │               └── agents/
 │                   └── huginn.ts # Agent definition (dynamic instructions, memory)
+│
+│           └── workflows/
+│               └── daily-briefing.ts # On-demand briefing workflow (calendar + memory + LLM)
 │
 └── packages/
     └── shared/                   # Shared library

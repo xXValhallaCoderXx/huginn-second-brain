@@ -17,6 +17,7 @@ import { registerHandlers } from "./telegram/handlers.js";
 const db = createDb(process.env.APP_DATABASE_URL!);
 const personalityStore = createPersonalityStore(db);
 const calendarService = createCalendarService(db);
+const accountService = createAccountService(db);
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
@@ -139,7 +140,6 @@ serve({ fetch: app.fetch, port }, () => {
 // --- Telegram bot (long polling) ---
 const bot = await createBot();
 if (bot) {
-    const accountService = createAccountService(db);
     registerHandlers(bot, { mastra, accountService, personalityStore, calendarService, db });
     bot.start({
         onStart: () => console.log("[telegram] Bot started (long polling)"),

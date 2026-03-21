@@ -3,10 +3,12 @@ import { Observability, DefaultExporter } from "@mastra/observability";
 import { huginnAgent } from "./agents/huginn.js";
 import { storage } from "./storage.js";
 import { getCalendarTool } from "./tools/get-calendar.js";
+import { dailyBriefingWorkflow } from "../workflows/daily-briefing.js";
 
 export const mastra = new Mastra({
     agents: { huginn: huginnAgent },
     tools: { "get-calendar": getCalendarTool },
+    workflows: { "daily-briefing": dailyBriefingWorkflow },
     storage,
     observability: new Observability({
         configs: {
