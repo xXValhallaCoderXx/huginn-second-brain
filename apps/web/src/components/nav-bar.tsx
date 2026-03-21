@@ -4,6 +4,7 @@ const navLinks = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/chat", label: "Chat" },
     { to: "/channels", label: "Connected Channels" },
+    { to: "/calendars", label: "Calendars" },
     { to: "/settings", label: "Settings" },
 ] as const;
 

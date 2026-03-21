@@ -60,6 +60,7 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - `channel_links` — FK to accounts, `provider` + `providerUserId` with two unique composite indexes
 - `personality_files` — append-only versioning (INSERT with incremented `version`, never UPDATE)
 - `linking_codes` — one-time codes with 10min expiry, `used` boolean flag
+- `calendar_connections` — OAuth tokens (AES-256-GCM encrypted), FK to accounts, unique on (accountId, provider, providerEmail)
 - `user`, `session`, `account`, `verification` — Better Auth tables (schema in `auth.ts`)
 
 ### Service Implementations — packages/shared/src/services/
@@ -71,11 +72,18 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - `createPersonalityStore(db)` — implements `PersonalityStore` (load, save, exists, history)
 - `seedNewAccount(db, accountId)` — seeds default SOUL + IDENTITY personality files
 - `verifyAndConsumeLinkingCode(db, code)` — atomic verify + consume (race-condition safe)
+- `createCalendarConnectionService(db)` — CRUD for calendar_connections (encrypts tokens at rest)
+- `createCalendarService(db)` — aggregates events across providers, auto-refreshes tokens, deduplicates
+- `googleCalendarProvider` — Google Calendar API v3 HTTP client (no googleapis SDK)
+- `encryptToken(plaintext)` / `decryptToken(encrypted)` — AES-256-GCM token encryption
 
 ### Interface Contracts — packages/shared/src/types/
 
 - `AccountService` — 9 methods for accounts, channel links, linking codes
 - `PersonalityStore` — `load()` (latest version), `save()` (insert new), `exists()`, `history()`
+- `CalendarService` — `getEvents(accountId, range)`, `formatForContext(events)` — aggregation + context formatting
+- `CalendarConnectionService` — CRUD for encrypted calendar OAuth connections
+- `CalendarProvider` — plugin interface (getEvents, refreshTokens) for each calendar provider
 - Return `null` for not-found, don't throw
 
 ### TanStack Start Patterns (apps/web)
@@ -129,6 +137,16 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - `instructions` callback guards against missing `requestContext` — returns `BASE_INSTRUCTIONS` as fallback when Studio introspects the agent
 - **Mastra Studio**: Use `mastra studio --server-port 4111 --port 3001` for server-adapter projects. Do NOT use `mastra dev` — it creates a separate isolated server and ignores the Hono adapter setup
 
+### Calendar Integration Patterns
+
+- **Separate OAuth from auth**: Calendar OAuth uses same `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` but requests `calendar.readonly` scope separately from Better Auth sign-in
+- **Encrypted tokens**: All OAuth tokens stored with AES-256-GCM encryption (`CALENDAR_ENCRYPTION_KEY` env var). Encryption/decryption happens in `CalendarConnectionService`, transparent to callers
+- **HMAC-signed state**: OAuth state parameter is HMAC-SHA256 signed with `BETTER_AUTH_SECRET`, 10min expiry, prevents CSRF
+- **OAuth callback**: Nitro server route at `/api/calendar/callback` — exchanges code, fetches userinfo email, stores connection
+- **Context injection**: `buildInstructions()` injects today's calendar into the agent system prompt (5min in-memory cache)
+- **On-demand tool**: `get-calendar` Mastra tool lets the agent query arbitrary date ranges when users ask about their schedule
+- **Provider plugin**: `CalendarProvider` interface allows future providers (Outlook, etc.) without changing service layer
+
 ### Telegram Bot Patterns (apps/agent)
 
 - grammY bot in `src/telegram/bot.ts` — factory pattern, opt-in via `TELEGRAM_BOT_TOKEN`
@@ -175,6 +193,13 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - [apps/agent/src/identity/instructions.ts](apps/agent/src/identity/instructions.ts) — buildInstructions() personality injection
 - [apps/agent/src/mastra/storage.ts](apps/agent/src/mastra/storage.ts) — PostgresStore shared instance (mastra schema)
 - [apps/agent/src/mastra/index.ts](apps/agent/src/mastra/index.ts) — Mastra instance config
+- [apps/agent/src/mastra/tools/get-calendar.ts](apps/agent/src/mastra/tools/get-calendar.ts) — Calendar lookup tool for the agent
+- [apps/agent/src/calendar-cache.ts](apps/agent/src/calendar-cache.ts) — In-memory 5min TTL cache for calendar events
+- [apps/web/src/components/calendars-page.tsx](apps/web/src/components/calendars-page.tsx) — Calendar connections management page
+- [apps/web/server/api/calendar/callback.ts](apps/web/server/api/calendar/callback.ts) — Google Calendar OAuth callback (Nitro route)
+- [packages/shared/src/services/calendar-service.ts](packages/shared/src/services/calendar-service.ts) — CalendarService (event aggregation + context formatting)
+- [packages/shared/src/services/calendar-connection-service.ts](packages/shared/src/services/calendar-connection-service.ts) — Calendar connection CRUD (encrypted tokens)
+- [packages/shared/src/services/crypto.ts](packages/shared/src/services/crypto.ts) — AES-256-GCM encryption utilities
 - [packages/shared/src/services/account-service.ts](packages/shared/src/services/account-service.ts) — AccountService implementation (all methods)
 
 ## Milestones
@@ -188,6 +213,7 @@ Current: **Phase 2 complete** (Storage migration + Observational Memory). Next m
 - ~~**M4**: Working memory, conversation quality, full smoke test~~ ✅
 - ~~**Phase 2 — M2.0**: Storage migration (libSQL → PostgreSQL, `mastra` schema)~~ ✅
 - ~~**Phase 2 — M2.1**: Observational Memory (thread-scoped, Gemini 2.5 Flash)~~ ✅
+- ~~**Calendar Integration**: Google Calendar OAuth, encrypted token storage, context injection, Mastra tool~~ ✅
 - **Phase 3**: Personality refinement workflow (OM → SOUL.md/IDENTITY.md evolution)
 
 ## Environment Variables
@@ -201,3 +227,6 @@ Current: **Phase 2 complete** (Storage migration + Observational Memory). Next m
 | `GOOGLE_CLIENT_SECRET` | M1+                              | web                |
 | `BETTER_AUTH_SECRET`   | M1+                              | web                |
 | `APP_URL`              | M1+                              | web                |
+| `CALENDAR_ENCRYPTION_KEY` | Calendar feature                 | shared (crypto)    |
+
+`CALENDAR_ENCRYPTION_KEY` must be a 64-character hex string (32 bytes). Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`

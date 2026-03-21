@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { createPersonalityStore, createAccountService } from "@huginn/shared";
+import { createPersonalityStore, createAccountService, createCalendarConnectionService } from "@huginn/shared";
 import { auth } from "./auth";
 import { db } from "./db";
 import { resolveAccount } from "./account-resolution";
@@ -132,4 +132,112 @@ export const checkTelegramLinked = createServerFn({ method: "GET" })
         const links = await svc.getChannelLinks(account.id);
         const telegram = links.find((l) => l.provider === "telegram");
         return { linked: !!telegram };
+    });
+
+// ── Calendar OAuth helpers ──
+
+async function signState(payload: string): Promise<string> {
+    const { createHmac } = await import("node:crypto");
+    const secret = process.env.BETTER_AUTH_SECRET!;
+    return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+export async function verifyState(state: string): Promise<{ accountId: string } | null> {
+    try {
+        const [payloadB64, sig] = state.split(".");
+        if (!payloadB64 || !sig) return null;
+        const expected = await signState(payloadB64);
+        if (sig !== expected) return null;
+        const decoded = JSON.parse(
+            Buffer.from(payloadB64, "base64url").toString("utf8"),
+        ) as { accountId: string; ts: number };
+        // 10 minute expiry
+        if (Date.now() - decoded.ts > 10 * 60 * 1000) return null;
+        return { accountId: decoded.accountId };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Server function: initiate Google Calendar OAuth flow.
+ * Returns the Google consent URL for the client to redirect to.
+ */
+export const initiateCalendarOAuth = createServerFn({ method: "POST" })
+    .handler(async () => {
+        const account = await resolveAuthenticatedAccount();
+
+        const payload = Buffer.from(
+            JSON.stringify({ accountId: account.id, ts: Date.now() }),
+        ).toString("base64url");
+        const sig = await signState(payload);
+        const state = `${payload}.${sig}`;
+
+        const params = new URLSearchParams({
+            client_id: process.env.GOOGLE_CLIENT_ID!,
+            redirect_uri: `${process.env.APP_URL}/api/calendar/callback`,
+            response_type: "code",
+            scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
+            access_type: "offline",
+            prompt: "consent",
+            state,
+        });
+
+        return { url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
+    });
+
+/**
+ * Server function: list calendar connections (tokens stripped) for authenticated account.
+ */
+export const getCalendarConnections = createServerFn({ method: "GET" })
+    .handler(async () => {
+        const account = await resolveAuthenticatedAccount();
+        const svc = createCalendarConnectionService(db);
+        return svc.getConnectionInfo(account.id);
+    });
+
+/**
+ * Server function: toggle a calendar connection on/off.
+ */
+export const toggleCalendarConnection = createServerFn({ method: "POST" })
+    .inputValidator((data: { connectionId: string; enabled: boolean }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const svc = createCalendarConnectionService(db);
+        // Ownership check: load connection and verify it belongs to this account
+        const connections = await svc.getConnectionInfo(account.id);
+        const conn = connections.find((c) => c.id === data.connectionId);
+        if (!conn) throw new Error("Connection not found");
+        await svc.toggleEnabled(data.connectionId, data.enabled);
+        return { success: true };
+    });
+
+/**
+ * Server function: update display name for a calendar connection.
+ */
+export const updateCalendarDisplayName = createServerFn({ method: "POST" })
+    .inputValidator((data: { connectionId: string; displayName: string }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const svc = createCalendarConnectionService(db);
+        const connections = await svc.getConnectionInfo(account.id);
+        const conn = connections.find((c) => c.id === data.connectionId);
+        if (!conn) throw new Error("Connection not found");
+        await svc.updateDisplayName(data.connectionId, data.displayName);
+        return { success: true };
+    });
+
+/**
+ * Server function: delete a calendar connection.
+ */
+export const deleteCalendarConnection = createServerFn({ method: "POST" })
+    .inputValidator((data: { connectionId: string }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const svc = createCalendarConnectionService(db);
+        const connections = await svc.getConnectionInfo(account.id);
+        const conn = connections.find((c) => c.id === data.connectionId);
+        if (!conn) throw new Error("Connection not found");
+        await svc.deleteConnection(data.connectionId);
+        return { success: true };
     });

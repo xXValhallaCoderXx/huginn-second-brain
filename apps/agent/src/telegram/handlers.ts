@@ -1,18 +1,19 @@
 import type { Bot } from "grammy";
 import { RequestContext } from "@mastra/core/request-context";
 import type { Mastra } from "@mastra/core";
-import type { AccountService, PersonalityStore, Database } from "@huginn/shared";
+import type { AccountService, PersonalityStore, CalendarService, Database } from "@huginn/shared";
 import { verifyAndConsumeLinkingCode } from "@huginn/shared";
 
 interface HandlerDeps {
     mastra: Mastra;
     accountService: AccountService;
     personalityStore: PersonalityStore;
+    calendarService: CalendarService;
     db: Database;
 }
 
 export function registerHandlers(bot: Bot, deps: HandlerDeps): void {
-    const { mastra, accountService, personalityStore, db } = deps;
+    const { mastra, accountService, personalityStore, calendarService, db } = deps;
 
     async function handleLinkCode(ctx: { from?: { id: number }; reply: (text: string) => Promise<unknown> }, code: string) {
         const telegramUserId = String(ctx.from?.id);
@@ -88,6 +89,7 @@ export function registerHandlers(bot: Bot, deps: HandlerDeps): void {
         const requestContext = new RequestContext();
         requestContext.set("account-id", account.id);
         requestContext.set("personality-store", personalityStore);
+        requestContext.set("calendar-service", calendarService);
 
         try {
             const response = await agent.generate(ctx.message.text, {

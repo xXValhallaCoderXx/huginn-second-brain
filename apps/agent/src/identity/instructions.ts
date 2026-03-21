@@ -1,4 +1,8 @@
-import type { PersonalityStore } from "@huginn/shared";
+import type { PersonalityStore, CalendarService } from "@huginn/shared";
+import {
+    getCachedEvents,
+    setCachedEvents,
+} from "../calendar-cache.js";
 
 export const BASE_INSTRUCTIONS = `You are Huginn, a personal AI assistant.
 
@@ -14,7 +18,13 @@ export const BASE_INSTRUCTIONS = `You are Huginn, a personal AI assistant.
 - Update working memory when the user mentions priorities, deadlines, or
   things they're waiting on.
 - Clear stale items when they're resolved or no longer relevant.
-- Keep it concise — this is a scratchpad, not a journal.`;
+- Keep it concise — this is a scratchpad, not a journal.
+
+## Calendar
+- Your calendar context (if present above) shows today's events the user
+  has connected. Reference it naturally when relevant.
+- You can also use the get_calendar tool to look up events for a specific
+  date range when the user asks about their schedule.`;
 
 export const WORKING_MEMORY_TEMPLATE = `# Active Context
 
@@ -27,6 +37,7 @@ export const WORKING_MEMORY_TEMPLATE = `# Active Context
 export async function buildInstructions(
   accountId: string,
   store: PersonalityStore,
+  calendarService?: CalendarService,
 ): Promise<string> {
   const [soul, identity] = await Promise.all([
     store.load(accountId, "SOUL"),
@@ -36,7 +47,27 @@ export async function buildInstructions(
   const hasPersonality = soul !== null || identity !== null;
   console.log(`[buildInstructions] accountId=${accountId} hasSOUL=${soul !== null} hasIDENTITY=${identity !== null}`);
 
-  return [soul, identity, BASE_INSTRUCTIONS]
+  let calendarBlock = "";
+  if (calendarService) {
+    try {
+      let events = getCachedEvents(accountId);
+      if (!events) {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1_000);
+        events = await calendarService.getEvents(accountId, {
+          start: startOfDay,
+          end: endOfDay,
+        });
+        setCachedEvents(accountId, events);
+      }
+      calendarBlock = calendarService.formatForContext(events);
+    } catch (err) {
+      console.warn("[buildInstructions] Calendar fetch failed:", err);
+    }
+  }
+
+  return [soul, identity, calendarBlock, BASE_INSTRUCTIONS]
     .filter(Boolean)
     .join("\n\n---\n\n");
 }
