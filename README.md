@@ -2,7 +2,7 @@
 
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
-> **Status**: Phase 1 POC — Milestone 3 (Telegram bot, channel linking, deep link UX) complete
+> **Status**: Phase 2 complete — Calendar integration, Observational Memory, Semantic Recall, Mastra Studio observability
 
 ---
 
@@ -12,8 +12,8 @@ Huginn is a monorepo with two apps and a shared package:
 
 | Package           | Description                                                                  |
 | ----------------- | ---------------------------------------------------------------------------- |
-| `apps/web`        | TanStack Start (React) web dashboard — auth, linking, personality management |
-| `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, channel handling  |
+| `apps/web`        | TanStack Start (React) web dashboard — auth, linking, personality, calendar management |
+| `apps/agent`      | Mastra AI agent + Telegram bot — LLM interactions, memory, calendar tools, channel handling  |
 | `packages/shared` | Drizzle schemas, DB connection factory, services, TypeScript interfaces    |
 
 **Single database, schema isolation:**
@@ -45,9 +45,17 @@ huginn-second-brain/
 │   ├── web/                      # TanStack Start web app
 │   │   ├── vite.config.ts        # Vite + TanStack Start + Nitro
 │   │   ├── server/
-│   │   │   └── api/auth/[...].ts # Nitro catch-all for Better Auth
+│   │   │   └── api/
+│   │   │       ├── auth/[...].ts # Nitro catch-all for Better Auth
+│   │   │       └── calendar/
+│   │   │           └── callback.ts # Google Calendar OAuth callback
 │   │   └── src/
 │   │       ├── router.tsx        # TanStack Router config
+│   │       ├── components/
+│   │       │   ├── nav-bar.tsx       # Shared navigation
+│   │       │   ├── channels-page.tsx # Connected channels management
+│   │       │   ├── calendars-page.tsx # Calendar connections management
+│   │       │   └── edit-identity-page.tsx # Personality editor
 │   │       ├── routes/
 │   │       │   ├── __root.tsx    # Root layout
 │   │       │   ├── index.tsx     # Landing / sign-in page
@@ -55,6 +63,8 @@ huginn-second-brain/
 │   │       │   └── _authenticated/
 │   │       │       ├── dashboard.tsx  # Personality editor + channel status
 │   │       │       ├── chat.tsx       # Streaming chat with Huginn agent
+│   │       │       ├── calendars.tsx  # Calendar connections page
+│   │       │       ├── settings.tsx   # Settings page
 │   │       │       └── link/
 │   │       │           └── telegram.tsx # Telegram linking (deep link + QR code)
 │   │       └── lib/
@@ -62,21 +72,23 @@ huginn-second-brain/
 │   │           ├── auth-client.ts # Better Auth React client
 │   │           ├── db.ts         # DB connection (server-only)
 │   │           ├── session.ts    # Session server function
-│   │           ├── server-fns.ts # Auth + personality server fns
+│   │           ├── server-fns.ts # Auth + personality + calendar server fns
 │   │           └── account-resolution.ts # BA session → Huginn account
 │   │
 │   └── agent/                    # Mastra agent service (port 4111)
-│       ├── scripts/
-│       │   └── test-m2.ts        # M2 acceptance test
 │       └── src/
 │           ├── index.ts          # Hono HTTP server (/chat, /chat/stream, /telegram/info)
+│           ├── calendar-cache.ts # In-memory 5min TTL cache for calendar events
 │           ├── identity/
-│           │   └── instructions.ts # buildInstructions() — personality injection
+│           │   └── instructions.ts # buildInstructions() — personality + calendar + date injection
 │           ├── telegram/
 │           │   ├── bot.ts        # grammY bot factory (auto-discovers username)
 │           │   └── handlers.ts   # /start, /link, message routing handlers
 │           └── mastra/
-│               ├── index.ts      # Mastra instance + PostgreSQL storage
+│               ├── index.ts      # Mastra instance (storage, observability, tools)
+│               ├── storage.ts    # PostgresStore shared instance (mastra schema)
+│               ├── tools/
+│               │   └── get-calendar.ts # Calendar lookup tool (period-based + date range)
 │               └── agents/
 │                   └── huginn.ts # Agent definition (dynamic instructions, memory)
 │
@@ -89,15 +101,21 @@ huginn-second-brain/
             │   ├── accounts.ts
             │   ├── auth.ts       # Better Auth tables (user, session, account, verification)
             │   ├── channel-links.ts
+            │   ├── calendar-connections.ts
             │   ├── personality-files.ts
             │   └── linking-codes.ts
             ├── services/         # Service implementations
             │   ├── account-service.ts  # AccountService + linking code helpers
             │   ├── personality-store.ts # PersonalityStore (load, save, exists, history)
+            │   ├── calendar-service.ts # CalendarService (event aggregation + context formatting)
+            │   ├── calendar-connection-service.ts # Calendar connection CRUD (encrypted tokens)
+            │   ├── google-calendar-provider.ts   # Google Calendar API v3 HTTP client
+            │   ├── crypto.ts       # AES-256-GCM encryption utilities
             │   └── seed.ts       # Default SOUL + IDENTITY seeding
             └── types/            # TypeScript interfaces
                 ├── accounts.ts   # Account, ChannelLink, AccountService
-                └── identity.ts   # PersonalityStore, PersonalityFileType
+                ├── identity.ts   # PersonalityStore, PersonalityFileType
+                └── calendar.ts   # CalendarService, CalendarProvider, CalendarConnection
 ```
 
 ---
@@ -148,7 +166,7 @@ docker compose ps
 pnpm db:push
 ```
 
-This creates 8 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`, plus 4 Better Auth tables (`user`, `session`, `account`, `verification`).
+This creates 9 tables in Postgres: `accounts`, `channel_links`, `personality_files`, `linking_codes`, `calendar_connections`, plus 4 Better Auth tables (`user`, `session`, `account`, `verification`).
 
 ### 5. Run development servers
 
@@ -206,7 +224,11 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | ORM             | Drizzle                                      |
 | Agent framework | Mastra                                       |
 | Agent memory    | Mastra Memory + PostgreSQL (`mastra` schema) |
+| Semantic recall | PgVector + text-embedding-3-small (OpenRouter) |
+| Observational memory | Mastra OM + Gemini 2.5 Flash (OpenRouter) |
+| Observability   | @mastra/observability + DefaultExporter |
 | LLM routing     | OpenRouter (Claude Sonnet 4)                 |
+| Calendar        | Google Calendar API v3 (direct HTTP)         |
 | Telegram        | grammY                                       |
 | Runtime         | Node.js 22+                                  |
 | Infrastructure  | Docker Compose / Railway                     |
@@ -220,10 +242,11 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 | `APP_DATABASE_URL`     | shared, web, agent | PostgreSQL connection string                 |
 | `OPENROUTER_API_KEY`   | agent              | LLM provider key                             |
 | `TELEGRAM_BOT_TOKEN`   | agent              | grammY bot token                             |
-| `GOOGLE_CLIENT_ID`     | web                | Google OAuth client ID                       |
-| `GOOGLE_CLIENT_SECRET` | web                | Google OAuth client secret                   |
-| `BETTER_AUTH_SECRET`   | web                | Session signing secret                       |
+| `GOOGLE_CLIENT_ID`     | web, shared        | Google OAuth client ID                       |
+| `GOOGLE_CLIENT_SECRET` | web, shared        | Google OAuth client secret                   |
+| `BETTER_AUTH_SECRET`   | web                | Session signing secret + HMAC state signing  |
 | `APP_URL`              | web                | Public URL for OAuth redirects               |
+| `CALENDAR_ENCRYPTION_KEY` | shared          | 64-char hex string for AES-256-GCM token encryption |
 
 ---
 

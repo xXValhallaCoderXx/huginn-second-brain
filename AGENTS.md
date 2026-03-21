@@ -112,7 +112,7 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - **Tailwind CSS v4** with `@theme` directive in `apps/web/src/styles/globals.css` — defines design tokens (colors, shadows, radii)
 - Global CSS imported in `__root.tsx` via `import "../styles/globals.css"`
 - **Component extraction pattern**: Full page components live in `apps/web/src/components/` (safe from route generator). Route files are minimal stubs that import from components.
-- Existing extracted components: `nav-bar.tsx`, `channels-page.tsx`, `edit-identity-page.tsx`
+- Existing extracted components: `nav-bar.tsx`, `channels-page.tsx`, `edit-identity-page.tsx`, `calendars-page.tsx`
 - Dark theme with semantic color tokens: `--color-page`, `--color-surface`, `--color-accent`, `--color-text-heading`, etc.
 - NavBar component in `nav-bar.tsx` — shared navigation across authenticated routes, rendered in `_authenticated.tsx` layout
 
@@ -135,6 +135,8 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - `MastraServer` from `@mastra/hono` registers Mastra API routes at `/api/*` via `server.init()`
 - CORS enabled on `/api/*` (plus `/chat/*`, `/telegram/*`) for Studio (port 3001) and web app (port 3000)
 - `instructions` callback guards against missing `requestContext` — returns `BASE_INSTRUCTIONS` as fallback when Studio introspects the agent
+- **Observability**: `@mastra/observability` with `DefaultExporter` — storage-backed trace collection. Configured as `new Observability({ configs: { default: { serviceName: "huginn", exporters: [new DefaultExporter()] } } })`. Traces visible in Mastra Studio Observability tab.
+- **Tools registered at Mastra level**: `tools: { "get-calendar": getCalendarTool }` in the Mastra constructor — required for Studio's Tools tab to show them
 - **Mastra Studio**: Use `mastra studio --server-port 4111 --port 3001` for server-adapter projects. Do NOT use `mastra dev` — it creates a separate isolated server and ignores the Hono adapter setup
 
 ### Calendar Integration Patterns
@@ -143,9 +145,11 @@ pnpm --filter @huginn/agent dev:studio # Mastra Studio (port 3001, connects to a
 - **Encrypted tokens**: All OAuth tokens stored with AES-256-GCM encryption (`CALENDAR_ENCRYPTION_KEY` env var). Encryption/decryption happens in `CalendarConnectionService`, transparent to callers
 - **HMAC-signed state**: OAuth state parameter is HMAC-SHA256 signed with `BETTER_AUTH_SECRET`, 10min expiry, prevents CSRF
 - **OAuth callback**: Nitro server route at `/api/calendar/callback` — exchanges code, fetches userinfo email, stores connection
-- **Context injection**: `buildInstructions()` injects today's calendar into the agent system prompt (5min in-memory cache)
-- **On-demand tool**: `get-calendar` Mastra tool lets the agent query arbitrary date ranges when users ask about their schedule
+- **Context injection**: `buildInstructions()` injects today's calendar into the agent system prompt (5min in-memory cache). Also injects current date (`Today is ${dateStr}.`) using `Intl.DateTimeFormat` for locale-aware formatting
+- **On-demand tool**: `get-calendar` Mastra tool lets the agent query arbitrary date ranges when users ask about their schedule. Supports `period` parameter (`"today"`, `"tomorrow"`, `"this week"`, `"next week"`) with server-side date math via `resolveRelativePeriod()` — avoids LLM date hallucination. Falls back to explicit `startDate`/`endDate` params.
 - **Provider plugin**: `CalendarProvider` interface allows future providers (Outlook, etc.) without changing service layer
+- **Calendar filtering**: Google Calendar provider only includes calendars where user has `accessRole` of `"owner"` or `"writer"` (excludes subscribed/read-only calendars). Also filters out events where the authenticated user (`self: true`) has `responseStatus: "declined"`.
+- **OAuth callback**: Nitro server route at `/api/calendar/callback` — uses `redirect(url, 302)` (h3 v2 API)
 
 ### Telegram Bot Patterns (apps/agent)
 
