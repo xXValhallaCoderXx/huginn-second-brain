@@ -50,11 +50,10 @@ function ChatPage() {
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const res = await fetch("http://localhost:4111/chat/stream", {
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accountId: account.id,
           message: text,
           threadId,
         }),
@@ -116,7 +115,7 @@ function ChatPage() {
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, account.id, threadId]);
+  }, [input, isStreaming, threadId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

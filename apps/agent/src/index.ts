@@ -131,7 +131,7 @@ app.get("/telegram/info", (c) => {
     return c.json({ username });
 });
 
-const port = Number(process.env.AGENT_PORT ?? 4111);
+const port = Number(process.env.PORT ?? process.env.AGENT_PORT ?? 4111);
 serve({ fetch: app.fetch, port }, () => {
     console.log(`Huginn agent service running on http://localhost:${port}`);
     console.log("Registered agents:", Object.keys(mastra.listAgents()));
