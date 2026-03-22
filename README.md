@@ -3,6 +3,7 @@
 A self-hosted personal AI system where identity is owned by the application, not by any channel. One account → one personality → one memory → accessible from any linked channel → fully isolated between users.
 
 > **Status**: Phase 2 complete — Calendar integration, Observational Memory, Semantic Recall, Daily Briefing (`/brief`), Mastra Studio observability
+> **Deployed**: Railway (web + agent services, shared PostgreSQL)
 
 ---
 
@@ -148,7 +149,7 @@ cp .env.example .env
 Edit `.env` with your values. For local development, the defaults work with Docker Compose:
 
 ```env
-APP_DATABASE_URL=postgresql://huginn:huginn@localhost:5432/huginn
+DATABASE_URL=postgresql://huginn:huginn@localhost:5432/huginn
 ```
 
 ### 3. Start PostgreSQL
@@ -240,16 +241,23 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 
 ## Environment Variables
 
-| Variable               | Used By            | Description                                  |
-| ---------------------- | ------------------ | -------------------------------------------- |
-| `APP_DATABASE_URL`     | shared, web, agent | PostgreSQL connection string                 |
-| `OPENROUTER_API_KEY`   | agent              | LLM provider key                             |
-| `TELEGRAM_BOT_TOKEN`   | agent              | grammY bot token                             |
-| `GOOGLE_CLIENT_ID`     | web, shared        | Google OAuth client ID                       |
-| `GOOGLE_CLIENT_SECRET` | web, shared        | Google OAuth client secret                   |
-| `BETTER_AUTH_SECRET`   | web                | Session signing secret + HMAC state signing  |
-| `APP_URL`              | web                | Public URL for OAuth redirects               |
-| `CALENDAR_ENCRYPTION_KEY` | shared          | 64-char hex string for AES-256-GCM token encryption |
+| Variable                  | Required        | Used By            | Description                                                      |
+| ------------------------- | --------------- | ------------------ | ---------------------------------------------------------------- |
+| `DATABASE_URL`            | Yes             | shared, web, agent | PostgreSQL connection string                                     |
+| `OPENROUTER_API_KEY`      | Yes             | agent              | LLM provider key                                                 |
+| `TELEGRAM_BOT_TOKEN`      | Yes             | agent              | grammY bot token                                                 |
+| `GOOGLE_CLIENT_ID`        | Yes             | web                | Google OAuth client ID                                           |
+| `GOOGLE_CLIENT_SECRET`    | Yes             | web                | Google OAuth client secret                                       |
+| `BETTER_AUTH_SECRET`      | Yes             | web                | Session signing secret + HMAC state signing                      |
+| `CALENDAR_ENCRYPTION_KEY` | Yes             | shared             | 64-char hex string for AES-256-GCM token encryption              |
+| `AGENT_URL`               | Yes (web)       | web                | Internal URL to the agent service (e.g. Railway private network) |
+| `APP_URL`                 | No              | web                | Public URL for OAuth redirects — auto-derived from `RAILWAY_PUBLIC_DOMAIN` if not set |
+| `DAILY_BRIEF_DRY_RUN`     | No              | agent              | Set to `true` to log briefings to console instead of sending     |
+
+Generate `CALENDAR_ENCRYPTION_KEY` with:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ---
 
@@ -262,3 +270,64 @@ pnpm --filter @huginn/agent dev    # Agent with tsx watch
 ```
 
 Both apps import schemas, types, and the DB factory from `@huginn/shared`. They never import from each other.
+
+---
+
+## Deployment (Railway)
+
+Huginn is deployed as two Railway services backed by a single managed PostgreSQL database.
+
+### Services
+
+| Service       | Start command                               | Port |
+| ------------- | ------------------------------------------- | ---- |
+| `huginn-web`  | `pnpm --filter @huginn/web start`           | 3000 |
+| `huginn-agent`| `pnpm --filter @huginn/agent start`         | 4111 |
+
+### Required env vars per service
+
+**huginn-web**
+
+| Variable | Value |
+| -------- | ----- |
+| `DATABASE_URL` | `${{huginn-db.DATABASE_URL}}` |
+| `BETTER_AUTH_SECRET` | *(strong random secret)* |
+| `GOOGLE_CLIENT_ID` | *(Google Cloud Console)* |
+| `GOOGLE_CLIENT_SECRET` | *(Google Cloud Console)* |
+| `CALENDAR_ENCRYPTION_KEY` | *(64-char hex)* |
+| `AGENT_URL` | `http://huginn-agent.railway.internal:${{huginn-agent.PORT}}` |
+
+`APP_URL` is **not required** — it is auto-derived from Railway's `RAILWAY_PUBLIC_DOMAIN` env var.
+
+**huginn-agent**
+
+| Variable | Value |
+| -------- | ----- |
+| `DATABASE_URL` | `${{huginn-db.DATABASE_URL}}` |
+| `OPENROUTER_API_KEY` | *(OpenRouter key)* |
+| `TELEGRAM_BOT_TOKEN` | *(BotFather token)* |
+| `GOOGLE_CLIENT_ID` | *(Google Cloud Console)* |
+| `GOOGLE_CLIENT_SECRET` | *(Google Cloud Console)* |
+| `CALENDAR_ENCRYPTION_KEY` | *(same 64-char hex as web)* |
+
+### Google OAuth — Required redirect URIs
+
+Add both of these in **Google Cloud Console → APIs & Services → Credentials → OAuth client**:
+
+```
+https://<your-railway-web-domain>/api/auth/callback/google
+https://<your-railway-web-domain>/api/calendar/callback
+```
+
+### Pushing the DB schema to Railway
+
+Railway injects a private `DATABASE_URL` (`postgres.railway.internal`) that is only reachable inside Railway's network. Running `pnpm db:push` locally will fail with `ENOTFOUND postgres.railway.internal`.
+
+**Use the public URL instead** (exposed by Railway's Postgres service as `DATABASE_PUBLIC_URL`):
+
+```bash
+# Get the public URL from Railway dashboard → Postgres service → Variables → DATABASE_PUBLIC_URL
+DATABASE_URL="postgresql://postgres:<password>@autorack.proxy.rlwy.net:<port>/railway" pnpm db:push
+```
+
+This only needs to be run once (or after schema changes). The deployed services use the private URL automatically.
