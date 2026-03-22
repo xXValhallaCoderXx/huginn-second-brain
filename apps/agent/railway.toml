@@ -1,7 +1,7 @@
 [build]
-buildCommand = "pnpm run build:web"
+buildCommand = "pnpm run build:agent"
 
 [deploy]
-startCommand = "pnpm run start:web"
+startCommand = "pnpm run start:agent"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
