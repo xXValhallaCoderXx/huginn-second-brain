@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 config({ path: resolve(import.meta.dirname, "../../../../../.env"), quiet: true });
 
 import { createDb, createCalendarConnectionService } from "@huginn/shared";
-import { verifyState } from "../../../src/lib/server-fns";
+import { verifyState } from "~/lib/server-fns";
 
 const db = createDb(process.env.DATABASE_URL!);
 

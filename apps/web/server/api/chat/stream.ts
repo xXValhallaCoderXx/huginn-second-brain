@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 
 config({ path: resolve(import.meta.dirname, "../../../../../.env"), quiet: true });
 
-import { auth } from "../../../src/lib/auth";
-import { db } from "../../../src/lib/db";
-import { resolveAccount } from "../../../src/lib/account-resolution";
+import { auth } from "~/lib/auth";
+import { db } from "~/lib/db";
+import { resolveAccount } from "~/lib/account-resolution";
 
 export default defineEventHandler(async (event) => {
     // Resolve authenticated account from session
