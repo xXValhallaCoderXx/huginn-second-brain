@@ -13,7 +13,7 @@ import { getCalendarTool } from "../tools/get-calendar.js";
 
 const vector = new PgVector({
     id: "huginn-vector",
-    connectionString: process.env.APP_DATABASE_URL!,
+    connectionString: process.env.DATABASE_URL!,
 });
 
 const embedder = new ModelRouterEmbeddingModel({

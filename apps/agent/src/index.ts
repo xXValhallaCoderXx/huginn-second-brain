@@ -14,7 +14,7 @@ import { mastra } from "./mastra/index.js";
 import { createBot, getBotUsername } from "./telegram/bot.js";
 import { registerHandlers } from "./telegram/handlers.js";
 
-const db = createDb(process.env.APP_DATABASE_URL!);
+const db = createDb(process.env.DATABASE_URL!);
 const personalityStore = createPersonalityStore(db);
 const calendarService = createCalendarService(db);
 const accountService = createAccountService(db);

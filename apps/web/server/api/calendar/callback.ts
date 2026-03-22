@@ -7,7 +7,7 @@ config({ path: resolve(import.meta.dirname, "../../../../../.env"), quiet: true 
 import { createDb, createCalendarConnectionService } from "@huginn/shared";
 import { verifyState } from "../../../src/lib/server-fns";
 
-const db = createDb(process.env.APP_DATABASE_URL!);
+const db = createDb(process.env.DATABASE_URL!);
 
 export default defineEventHandler(async (event) => {
     const query = getQuery(event) as Record<string, string>;
