@@ -1,6 +1,6 @@
 import React from "react";
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
-import { loadPersonalityFiles, savePersonalityFile, getChannelLinks, unlinkTelegramChannel } from "../../lib/server-fns";
+import { loadPersonalityFiles, getChannelLinks, unlinkTelegramChannel } from "../../lib/server-fns";
 import { signOut } from "../../lib/auth-client";
 import type { ChannelLink } from "@huginn/shared";
 
