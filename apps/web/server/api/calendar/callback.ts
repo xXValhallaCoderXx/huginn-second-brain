@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
             code,
             client_id: process.env.GOOGLE_CLIENT_ID!,
             client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-            redirect_uri: `${process.env.APP_URL}/api/calendar/callback`,
+            redirect_uri: `${process.env.APP_URL ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "http://localhost:3000")}/api/calendar/callback`,
             grant_type: "authorization_code",
         }),
     });

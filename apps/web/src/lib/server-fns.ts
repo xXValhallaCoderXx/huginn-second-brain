@@ -175,7 +175,7 @@ export const initiateCalendarOAuth = createServerFn({ method: "POST" })
 
         const params = new URLSearchParams({
             client_id: process.env.GOOGLE_CLIENT_ID!,
-            redirect_uri: `${process.env.APP_URL}/api/calendar/callback`,
+            redirect_uri: `${process.env.APP_URL ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "http://localhost:3000")}/api/calendar/callback`,
             response_type: "code",
             scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
             access_type: "offline",
