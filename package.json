@@ -1,21 +1,24 @@
 {
-  "name": "huginn-second-brain",
+  "name": "huginn",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "pnpm --filter @huginn/api dev",
-    "dev:api": "pnpm --filter @huginn/api dev",
-    "dev:public-docs": "pnpm --filter @huginn/public-docs dev",
-    "dev:private-docs": "pnpm --filter @huginn/private-docs dev",
-    "build": "pnpm --filter @huginn/api build",
-    "build:api": "pnpm --filter @huginn/api build",
-    "build:public-docs": "pnpm --filter @huginn/public-docs build",
-    "build:private-docs": "pnpm --filter @huginn/private-docs build",
-    "build:docs": "pnpm run build:public-docs && pnpm run build:private-docs",
-    "start": "pnpm --filter @huginn/api start",
-    "start:api": "pnpm --filter @huginn/api start",
-    "start:public-docs": "pnpm --filter @huginn/public-docs serve",
-    "start:private-docs": "pnpm --filter @huginn/private-docs serve",
-    "telegram:webhook:set": "pnpm --filter @huginn/api telegram:webhook:set",
-    "telegram:webhook:info": "pnpm --filter @huginn/api telegram:webhook:info"
-  }
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:push": "pnpm --filter @huginn/shared db:push",
+    "db:generate": "pnpm --filter @huginn/shared db:generate",
+    "db:studio": "pnpm --filter @huginn/shared db:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2",
+    "typescript": "^5.7",
+    "eslint": "^9",
+    "@eslint/js": "^9",
+    "typescript-eslint": "^8",
+    "prettier": "^3"
+  },
+  "packageManager": "pnpm@10.6.5"
 }
