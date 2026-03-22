@@ -13,6 +13,15 @@ export async function createBot(): Promise<Bot | null> {
     await bot.init();
     botUsername = bot.botInfo.username;
     console.log(`[telegram] Bot username: @${botUsername}`);
+
+    // Auto-register bot commands on startup
+    await bot.api.setMyCommands([
+        { command: "start", description: "Link your account" },
+        { command: "link", description: "Link with a code" },
+        { command: "brief", description: "Get your daily briefing" },
+    ]);
+    console.log("[telegram] Bot commands registered");
+
     return bot;
 }
 
