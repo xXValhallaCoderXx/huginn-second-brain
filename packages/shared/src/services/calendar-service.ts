@@ -1,12 +1,12 @@
-import type { Database } from "../db.js";
+import type { Database } from "../db";
 import type {
     CalendarConnection,
     CalendarEvent,
     CalendarProvider,
     CalendarService,
-} from "../types/calendar.js";
-import { createCalendarConnectionService } from "./calendar-connection-service.js";
-import { googleCalendarProvider } from "./google-calendar-provider.js";
+} from "../types/calendar";
+import { createCalendarConnectionService } from "./calendar-connection-service";
+import { googleCalendarProvider } from "./google-calendar-provider";
 
 const providers: Record<string, CalendarProvider> = {
     google: googleCalendarProvider,

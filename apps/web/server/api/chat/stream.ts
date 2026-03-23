@@ -1,4 +1,9 @@
 import { defineEventHandler, readBody, createError } from "h3";
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(import.meta.dirname, "../../../../../.env"), quiet: true });
+
 import { auth } from "~/lib/auth";
 import { db } from "~/lib/db";
 import { resolveAccount } from "~/lib/account-resolution";

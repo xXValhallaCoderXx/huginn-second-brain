@@ -1,7 +1,7 @@
 import { eq, and, desc, sql } from "drizzle-orm";
-import type { Database } from "../db.js";
-import { personalityFiles } from "../schema/personality-files.js";
-import type { PersonalityStore, VersionEntry } from "../types/identity.js";
+import type { Database } from "../db";
+import { personalityFiles } from "../schema/personality-files";
+import type { PersonalityStore, VersionEntry } from "../types/identity";
 
 export function createPersonalityStore(db: Database): PersonalityStore {
     return {

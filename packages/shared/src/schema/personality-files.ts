@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, integer, timestamp } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts.js";
+import { accounts } from "./accounts";
 
 export const personalityFiles = pgTable("personality_files", {
     id: uuid("id").primaryKey().defaultRandom(),
