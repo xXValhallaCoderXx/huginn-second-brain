@@ -5,5 +5,3 @@ buildCommand = "pnpm run build:agent"
 startCommand = "pnpm run start:agent"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
-healthcheckPath = "/health"
-healthcheckTimeout = 10

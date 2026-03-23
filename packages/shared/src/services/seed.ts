@@ -1,4 +1,4 @@
-import type { PersonalityStore } from "../types/identity.js";
+import type { PersonalityStore } from "../types/identity";
 
 export const DEFAULT_SOUL = `# SOUL — Communication Style
 

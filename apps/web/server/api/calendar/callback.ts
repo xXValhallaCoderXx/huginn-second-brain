@@ -1,4 +1,9 @@
 import { defineEventHandler, getQuery, redirect } from "h3";
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(import.meta.dirname, "../../../../../.env"), quiet: true });
+
 import { createDb, createCalendarConnectionService } from "@huginn/shared";
 import { verifyState } from "~/lib/server-fns";
 

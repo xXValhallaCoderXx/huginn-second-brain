@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts.js";
+import { accounts } from "./accounts";
 
 export const channelLinks = pgTable(
     "channel_links",
