@@ -2,7 +2,7 @@ import type {
     CalendarEvent,
     CalendarProvider,
     CalendarProviderType,
-} from "../types/calendar";
+} from "../types/calendar.js";
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";

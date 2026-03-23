@@ -1,13 +1,13 @@
 import { eq, and } from "drizzle-orm";
-import type { Database } from "../db";
-import { calendarConnections } from "../schema/calendar-connections";
-import { encryptToken, decryptToken } from "./crypto";
+import type { Database } from "../db.js";
+import { calendarConnections } from "../schema/calendar-connections.js";
+import { encryptToken, decryptToken } from "./crypto.js";
 import type {
     CalendarConnection,
     CalendarConnectionInfo,
     CalendarConnectionService,
     CalendarProviderType,
-} from "../types/calendar";
+} from "../types/calendar.js";
 
 function toConnection(
     row: typeof calendarConnections.$inferSelect,

@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
+    "build": "tsc -b",
     "lint": "eslint src/",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
