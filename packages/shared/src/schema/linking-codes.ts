@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, boolean } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts";
+import { accounts } from "./accounts.js";
 
 export const linkingCodes = pgTable("linking_codes", {
     id: uuid("id").primaryKey().defaultRandom(),

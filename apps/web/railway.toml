@@ -1,0 +1,9 @@
+[build]
+buildCommand = "pnpm run build:web"
+
+[deploy]
+startCommand = "pnpm run start:web"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+healthcheckPath = "/api/health"
+healthcheckTimeout = 10

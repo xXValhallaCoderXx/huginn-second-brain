@@ -1,6 +1,4 @@
-import { config } from "dotenv";
-import { resolve } from "node:path";
-config({ path: resolve(import.meta.dirname, "../../../.env") });
+import "./env.js";
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -11,7 +9,7 @@ import { RequestContext } from "@mastra/core/request-context";
 import { createDb, createPersonalityStore, createAccountService, createCalendarService } from "@huginn/shared";
 
 import { mastra } from "./mastra/index.js";
-import { createBot, getBotUsername } from "./telegram/bot.js";
+import { createBot, getBotUsername, getWebhookUrl, setWebhook, getWebhookCallback } from "./telegram/bot.js";
 import { registerHandlers } from "./telegram/handlers.js";
 
 const db = createDb(process.env.DATABASE_URL!);
@@ -122,6 +120,9 @@ app.post("/chat/stream", async (c) => {
     });
 });
 
+// --- Health check ---
+app.get("/health", (c) => c.json({ status: "ok" }));
+
 // --- Telegram bot info endpoint ---
 app.get("/telegram/info", (c) => {
     const username = getBotUsername();
@@ -137,18 +138,28 @@ serve({ fetch: app.fetch, port }, () => {
     console.log("Registered agents:", Object.keys(mastra.listAgents()));
 });
 
-// --- Telegram bot (long polling) ---
+// --- Telegram bot ---
 const bot = await createBot();
 if (bot) {
     registerHandlers(bot, { mastra, accountService, personalityStore, calendarService, db });
-    bot.start({
-        onStart: () => console.log("[telegram] Bot started (long polling)"),
-    });
 
-    const shutdown = () => {
-        console.log("[telegram] Stopping bot...");
-        bot.stop();
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
+    const webhookUrl = getWebhookUrl();
+    if (webhookUrl) {
+        // Production: register webhook route and tell Telegram to use it
+        const handleUpdate = getWebhookCallback();
+        app.post("/telegram/webhook", (c) => handleUpdate(c));
+        await setWebhook(webhookUrl);
+    } else {
+        // Development: long polling
+        bot.start({
+            onStart: () => console.log("[telegram] Bot started (long polling)"),
+        });
+
+        const shutdown = () => {
+            console.log("[telegram] Stopping bot...");
+            bot.stop();
+        };
+        process.on("SIGINT", shutdown);
+        process.on("SIGTERM", shutdown);
+    }
 }

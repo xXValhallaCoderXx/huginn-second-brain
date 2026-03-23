@@ -1,5 +1,5 @@
-export type { Account, ChannelLink, AccountService } from "./accounts";
-export type { PersonalityFileType, VersionEntry, PersonalityStore } from "./identity";
+export type { Account, ChannelLink, AccountService } from "./accounts.js";
+export type { PersonalityFileType, VersionEntry, PersonalityStore } from "./identity.js";
 export type {
     CalendarProviderType,
     CalendarConnection,
@@ -8,4 +8,4 @@ export type {
     CalendarProvider,
     CalendarService,
     CalendarConnectionService,
-} from "./calendar";
+} from "./calendar.js";

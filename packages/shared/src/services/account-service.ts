@@ -1,11 +1,11 @@
 import { eq, and, gt } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import type { Database } from "../db";
-import { accounts } from "../schema/accounts";
-import { authAccount } from "../schema/auth";
-import { channelLinks } from "../schema/channel-links";
-import { linkingCodes } from "../schema/linking-codes";
-import type { Account, AccountService, ChannelLink } from "../types/accounts";
+import type { Database } from "../db.js";
+import { accounts } from "../schema/accounts.js";
+import { authAccount } from "../schema/auth.js";
+import { channelLinks } from "../schema/channel-links.js";
+import { linkingCodes } from "../schema/linking-codes.js";
+import type { Account, AccountService, ChannelLink } from "../types/accounts.js";
 
 function toAccount(row: typeof accounts.$inferSelect): Account {
     return {

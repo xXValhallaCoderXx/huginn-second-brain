@@ -1,5 +1,5 @@
 import { pgTable, uuid, text, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts";
+import { accounts } from "./accounts.js";
 
 export const calendarConnections = pgTable(
     "calendar_connections",
