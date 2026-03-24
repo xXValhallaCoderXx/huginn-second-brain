@@ -1,7 +1,0 @@
-[build]
-buildCommand = "pnpm run build:agent"
-
-[deploy]
-startCommand = "pnpm run start:agent"
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5

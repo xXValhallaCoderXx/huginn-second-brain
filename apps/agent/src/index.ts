@@ -21,6 +21,11 @@ const accountService = createAccountService(db);
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
+// Health check for Railway / uptime monitoring
+app.get("/health", (c) => {
+    return c.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // Allow web app (port 3000) and Studio (port 3001) to call APIs
 app.use("/api/*", cors({ origin: "*" }));
 app.use("/chat/*", cors({ origin: "*" }));
