@@ -1,0 +1,261 @@
+---
+title: Database Schema & Data Model
+description: Detailed breakdown of PostgreSQL schemas, table relationships, and data integrity patterns in Huginn.
+---
+
+# Database Schema & Data Model
+
+Huginn uses **schema isolation** in a single PostgreSQL database to separate application data from agent memory while maintaining referential integrity.
+
+## Schema Overview
+
+| Schema       | Owner   | Tables                      | Purpose                                                                   |
+| ------------ | ------- | --------------------------- | ------------------------------------------------------------------------- |
+| **`public`** | Drizzle | Application + Auth + Vector | User accounts, personality files, OAuth connections, Better Auth sessions |
+| **`mastra`** | Mastra  | Agent Memory                | Threads, messages, working memory, observations, reflections              |
+
+The **bridge** between schemas: `public.accounts.id` = Mastra `resourceId` (same UUID).
+
+## Core Application Tables (`public` schema)
+
+### `accounts` — Huginn User Accounts
+
+```sql
+CREATE TABLE accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    google_sub TEXT NOT NULL UNIQUE,  -- Links to Better Auth
+    email TEXT NOT NULL,
+    display_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Key Points:**
+
+- `google_sub` links to Better Auth's `account` table (`providerId = 'google'`)
+- `id` becomes the `resourceId` for Mastra agent memory scoping
+- Seeded with default personality files on creation
+
+**Source:** [`packages/shared/src/schema/accounts.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/accounts.ts)
+
+### `personality_files` — Append-Only Personality Versioning
+
+```sql
+CREATE TABLE personality_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    file_type TEXT NOT NULL,  -- 'SOUL' | 'IDENTITY'
+    content TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    reason TEXT,  -- Why this version was created
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Versioning Logic:**
+
+- **Never UPDATE** — always INSERT with incremented `version`
+- Latest version = `MAX(version)` for `(account_id, file_type)` pair
+- Enables personality evolution tracking and rollback
+
+**Query Pattern:**
+
+```typescript
+// From packages/shared/src/services/personality-store.ts
+const row = await db.query.personalityFiles.findFirst({
+  where: and(eq(personalityFiles.accountId, accountId), eq(personalityFiles.fileType, file)),
+  orderBy: desc(personalityFiles.version), // Latest first
+});
+```
+
+**Source:** [`packages/shared/src/schema/personality-files.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/personality-files.ts)
+
+### `channel_links` — Multi-Platform Account Linking
+
+```sql
+CREATE TABLE channel_links (
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,  -- 'telegram'
+    provider_user_id TEXT NOT NULL,  -- Telegram chat ID as string
+    linked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- Prevent duplicate account links to same provider
+    UNIQUE(account_id, provider),
+    -- Prevent same provider account linking to multiple Huginn accounts
+    UNIQUE(provider, provider_user_id)
+);
+```
+
+**Unique Constraints:**
+
+- **One provider per Huginn account** — You can't link multiple Telegram accounts to one Huginn account
+- **One Huginn account per provider account** — Same Telegram account can't link to multiple Huginn accounts
+
+**Source:** [`packages/shared/src/schema/channel-links.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/channel-links.ts)
+
+### `linking_codes` — Temporary Channel Linking Codes
+
+```sql
+CREATE TABLE linking_codes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    code TEXT NOT NULL UNIQUE,  -- 'LINK-A4B2' format
+    provider TEXT NOT NULL,  -- 'telegram'
+    expires_at TIMESTAMPTZ NOT NULL,  -- 10 minutes from creation
+    used BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Race Condition Protection:**
+
+```typescript
+// From packages/shared/src/services/account-service.ts
+export async function verifyAndConsumeLinkingCode(
+  db: Database,
+  code: string,
+): Promise<{ accountId: string; provider: string } | null> {
+  const [row] = await db
+    .update(linkingCodes)
+    .set({ used: true }) // Atomic UPDATE prevents race conditions
+    .where(
+      and(
+        eq(linkingCodes.code, code),
+        eq(linkingCodes.used, false),
+        gt(linkingCodes.expiresAt, new Date()),
+      ),
+    )
+    .returning();
+  return row ? { accountId: row.accountId, provider: row.provider } : null;
+}
+```
+
+### `calendar_connections` — Encrypted OAuth Tokens
+
+```sql
+CREATE TABLE calendar_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,  -- 'google'
+    provider_email TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    access_token TEXT NOT NULL,     -- AES-256-GCM encrypted
+    refresh_token TEXT NOT NULL,    -- AES-256-GCM encrypted
+    token_expires_at TIMESTAMPTZ NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    UNIQUE(account_id, provider, provider_email)  -- One connection per provider per email
+);
+```
+
+**Token Encryption:**
+
+- All OAuth tokens encrypted at rest with AES-256-GCM
+- Encryption/decryption transparent to service layer
+- Uses `CALENDAR_ENCRYPTION_KEY` environment variable
+
+**Source:** [`packages/shared/src/schema/calendar-connections.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/calendar-connections.ts)
+
+## Better Auth Tables (`public` schema)
+
+Managed by Better Auth, not Huginn code directly:
+
+```sql
+-- Better Auth session storage
+CREATE TABLE user (...);
+CREATE TABLE session (...);
+CREATE TABLE account (          -- Links to accounts.google_sub
+    user_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,   -- 'google'
+    account_id TEXT NOT NULL,    -- Google sub ID
+    ...
+);
+CREATE TABLE verification (...);
+```
+
+**Bridge Query:**
+
+```typescript
+// From packages/shared/src/services/account-service.ts
+export async function getGoogleSubForBaUser(
+  db: Database,
+  baUserId: string,
+): Promise<string | null> {
+  const row = await db.query.authAccount.findFirst({
+    where: and(eq(authAccount.userId, baUserId), eq(authAccount.providerId, "google")),
+  });
+  return row?.accountId ?? null; // This becomes accounts.google_sub lookup
+}
+```
+
+## Mastra Memory Tables (`mastra` schema)
+
+Auto-managed by Mastra, **never query directly from app code:**
+
+| Table            | Purpose                                                    |
+| ---------------- | ---------------------------------------------------------- |
+| `threads`        | Conversation threads scoped by `resourceId`                |
+| `messages`       | Individual messages within threads                         |
+| `working_memory` | Persistent context across conversations (resourceId scope) |
+| `observations`   | Thread-scoped memory observations                          |
+| `reflections`    | High-level insights from observations                      |
+
+**Access Pattern:** Use Mastra's Memory API, not direct SQL queries.
+
+## PgVector Tables (`public` schema)
+
+Auto-managed by PgVector for semantic recall:
+
+- Vector embeddings for message content
+- Enables cross-thread semantic search (`scope: 'resource'`)
+- Used by agent for retrieving relevant past conversations
+
+## Data Integrity Patterns
+
+### Cascading Deletes
+
+```sql
+-- Delete account → cascades to all related data
+DELETE FROM accounts WHERE id = ?;
+-- Automatically deletes:
+-- - personality_files (FK constraint)
+-- - channel_links (FK constraint)
+-- - linking_codes (FK constraint)
+-- - calendar_connections (FK constraint)
+-- Mastra data stays isolated in mastra schema
+```
+
+### Unique Constraints Prevent Data Corruption
+
+- **One Google account per Huginn account** — `accounts.google_sub UNIQUE`
+- **No duplicate channel links** — `channel_links(account_id, provider)` and `channel_links(provider, provider_user_id)` composite unique indexes
+- **One calendar connection per provider per email** — `calendar_connections(account_id, provider, provider_email)` composite unique
+
+### Audit Trail via Versioning
+
+- Personality files maintain complete edit history
+- Linking codes track usage to prevent replay attacks
+- All tables have `created_at` for temporal ordering
+
+## Performance Considerations
+
+### Indexes
+
+- All foreign keys automatically indexed by PostgreSQL
+- `personality_files` compound index on `(account_id, file_type, version DESC)` for latest version queries
+- `channel_links` indexes on both unique constraint combinations
+
+### Query Patterns
+
+- **Latest personality version:** Query with `ORDER BY version DESC LIMIT 1`
+- **Account resolution:** Single join from `channel_links` to `accounts`
+- **Calendar events:** Provider-specific queries with connection auto-refresh
+
+## Migration Strategy
+
+- **Drizzle migrations** for `public` schema tables
+- **Mastra auto-migration** for `mastra` schema (runs on storage init)
+- **PgVector auto-migration** for vector tables (First usage creates tables)
+
+**Migration Files:** [`packages/shared/drizzle/`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/drizzle) (generated via `pnpm db:generate`)

@@ -1,0 +1,14 @@
+{
+  "title": "Engineering Docs",
+  "pages": [
+    "index",
+    "---Architecture---",
+    "architecture",
+    "---Development---",
+    "development",
+    "---Reference---",
+    "patterns",
+    "services",
+    "workflows"
+  ]
+}

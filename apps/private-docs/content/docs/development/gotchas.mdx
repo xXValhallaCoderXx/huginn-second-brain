@@ -1,0 +1,462 @@
+---
+title: Common Gotchas & Workarounds
+description: Known issues, edge cases, and debugging solutions that you will encounter while developing Huginn.
+---
+
+# Common Gotchas & Workarounds
+
+Every complex system has edge cases. Here are the issues you **will** encounter while developing Huginn, with tested solutions.
+
+## Package & Dependency Issues
+
+### zod Version Conficts in Agent (CRITICAL)
+
+**Error:** `_parse is not a function` crashes in agent service
+
+**Root Cause:** Mastra's internal modules mix `import from 'zod'` and `import from 'zod/v4'`. With `zod@3.25.x` (v4's v3 compatibility shim), these resolve to different APIs.
+
+**Solution:** Pin to `zod@4` in [`apps/agent/package.json`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/package.json):
+
+```json
+{
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}
+```
+
+<Callout type="error">
+  **Do NOT use `zod@3.25.x`** in the agent package. It will cause Mastra to crash with cryptic
+  errors.
+</Callout>
+
+### Drizzle ORM Duplicate Instance Conflicts
+
+**Error:** Type conflicts when importing `eq`, `and`, etc. in app packages
+
+**Root Cause:** pnpm monorepos can create multiple `drizzle-orm` instances. Importing operators in app packages causes TypeScript to see different types for the same operator.
+
+**Solution:** **Keep ALL Drizzle queries in `packages/shared/src/services/`**
+
+```typescript
+// ❌ DON'T: Import drizzle operators in apps
+// apps/web/src/routes/some-route.tsx
+import { eq } from "drizzle-orm"; // Creates conflicts
+
+// ✅ DO: Keep queries in shared services
+// packages/shared/src/services/account-service.ts
+import { eq, and } from "drizzle-orm";
+
+export function createAccountService(db: Database): AccountService {
+  return {
+    async getAccountById(id) {
+      return await db.query.accounts.findFirst({
+        where: eq(accounts.id, id),
+      });
+    },
+  };
+}
+```
+
+### Nitro Version Pinning (CRITICAL)
+
+**Issue:** TanStack Start requires specific Nitro version compatibility
+
+**Solution:** Pin `nitro@3.0.260311-beta` in [`apps/web/package.json`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/package.json):
+
+```json
+{
+  "dependencies": {
+    "nitro": "3.0.260311-beta"
+  }
+}
+```
+
+**Don't upgrade** Nitro until TanStack Start compatibility is verified.
+
+## Environment & Configuration Issues
+
+### Server-Side Environment Loading
+
+**Error:** `process.env.DATABASE_URL` is `undefined` in Nitro server routes
+
+**Root Cause:** Nitro/h3 server code does NOT get Vite's environment variables
+
+**Solution:** Use `dotenv` to load `.env` manually in server modules:
+
+```typescript
+// apps/web/src/lib/auth.ts, db.ts, etc.
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(import.meta.dirname, "../../../../.env") });
+
+const databaseUrl = process.env.DATABASE_URL!;
+```
+
+**Path calculation:** `import.meta.dirname` + relative path to monorepo root `.env`
+
+### Better Auth Schema Requirement
+
+**Error:** "Cannot find table 'user'" or similar auth table errors
+
+**Root Cause:** Drizzle adapter requires explicit schema mapping
+
+**Solution:** Always pass `schema` option to `drizzleAdapter()`:
+
+```typescript
+// apps/web/src/lib/auth.ts
+drizzleAdapter(db, {
+  provider: "pg",
+  schema: {
+    user,
+    session,
+    account: authAccount, // Note: renamed import to avoid conflicts
+    verification,
+  },
+});
+```
+
+### drizzle.config.ts Environment Loading
+
+**Error:** `drizzle-kit` commands fail with undefined `DATABASE_URL`
+
+**Root Cause:** Drizzle Kit bundles to CommonJS where `import.meta.dirname` is undefined
+
+**Solution:** Use `process.cwd()` in [`packages/shared/drizzle.config.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/drizzle.config.ts):
+
+```typescript
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(process.cwd(), "../../.env") });
+```
+
+## Docker & Database Issues
+
+### pgvector Extension Missing
+
+**Error:** `extension "vector" does not exist`
+
+**Root Cause:** Standard PostgreSQL images don't include the vector extension
+
+**Solution:** Use `pgvector/pgvector:pg16` image in [`docker-compose.yml`](file:///home/nate/Dungeon/Personal/huginn-second-brain/docker-compose.yml):
+
+```yaml
+services:
+  postgres:
+    image: pgvector/pgvector:pg16 # NOT postgres:16-alpine
+```
+
+If you see this error, recreate the container:
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+### Railway Private Networking for Migrations
+
+**Error:** `ENOTFOUND postgres.railway.internal` when running `railway run pnpm db:push`
+
+**Root Cause:** Railway's private DNS is only reachable within Railway's network, not from local machines
+
+**Solution:** Use public database URL for local → Railway operations:
+
+```bash
+# Don't use the private DATABASE_URL when running locally
+DATABASE_URL="postgresql://postgres:password@monorail.proxy.rlwy.net:12345/railway" pnpm db:push
+```
+
+Get the public URL from Railway's Postgres service variables.
+
+## Development Workflow Issues
+
+### TanStack Route Generator Overwrites Files
+
+**Error:** New route files get overwritten with stubs while dev server is running
+
+**Root Cause:** TanStack's file-based router regenerates [`routeTree.gen.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/routeTree.gen.ts) and overwrites "unknown" routes
+
+**Workaround:** **Component extraction pattern**
+
+1. Create full page components in [`apps/web/src/components/`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/components/)
+2. Keep route files as minimal imports:
+
+```tsx
+// apps/web/src/routes/_authenticated/channels.tsx (minimal)
+import { createFileRoute } from "@tanstack/react-router";
+import { ChannelsPage } from "../../components/channels-page";
+
+export const Route = createFileRoute("/_authenticated/channels")({
+  component: ChannelsPage,
+});
+
+// apps/web/src/components/channels-page.tsx (actual implementation)
+export function ChannelsPage() {
+  // Full implementation here...
+}
+```
+
+### pnpm dev Blocks Terminal
+
+**Issue:** `pnpm dev` runs persistently and blocks the terminal
+
+**Root Cause:** `turbo.json` has `"persistent": true` for development tasks
+
+**Solutions:**
+
+```bash
+# Option 1: Use separate terminals
+pnpm --filter @huginn/web dev     # Terminal 1
+pnpm --filter @huginn/agent dev   # Terminal 2
+
+# Option 2: Background process (Unix)
+pnpm dev &
+
+# Option 3: Screen/tmux session
+screen -S huginn-dev pnpm dev
+```
+
+## Authentication Issues
+
+### Better Auth vs Huginn Accounts Confusion
+
+**Error:** Querying Better Auth `user` table instead of Huginn `accounts`
+
+**Solution:** **Always use Huginn's `accounts` table** for application logic:
+
+```typescript
+// ❌ DON'T: Query Better Auth tables directly
+const user = await db.query.user.findFirst({ ... });
+
+// ✅ DO: Resolve to Huginn account
+const account = await resolveAuthenticatedAccount();
+const account = await accountService.getAccountByGoogleSub(googleSub);
+```
+
+**Remember:** Better Auth and Huginn accounts are separate systems linked by `googleSub`.
+
+### Missing APP_URL on Railway
+
+**Error:** Redirect URL mismatch in OAuth flows
+
+**Solution:** [`apps/web/src/lib/auth.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/lib/auth.ts) auto-derives from `RAILWAY_PUBLIC_DOMAIN`:
+
+```typescript
+// Auto-derivation (preferred on Railway)
+const baseURL =
+  process.env.APP_URL ||
+  (process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : "http://localhost:3000");
+```
+
+Only set `APP_URL` explicitly for custom domains.
+
+## Mastra Issues
+
+### Don't Use `mastra dev`
+
+**Error:** Mastra creates isolated server that ignores Hono adapter
+
+**Solution:** **Always use the project's dev scripts:**
+
+```bash
+# ✅ CORRECT: Use project dev script
+pnpm --filter @huginn/agent dev:studio
+
+# ❌ WRONG: Don't use mastra dev
+mastra dev  # Creates separate server, ignores Hono setup
+```
+
+### RequestContext Missing in Studio
+
+**Error:** Agent instructions return `BASE_INSTRUCTIONS` when viewed in Studio
+
+**Root Cause:** Mastra Studio introspects agents without `requestContext`
+
+**Solution:** Guard against missing context in agent instructions:
+
+```typescript
+// apps/agent/src/mastra/agents/huginn.ts
+instructions: async ({ requestContext }) => {
+    const accountId = requestContext?.get("account-id") as string;
+    const store = requestContext?.get("personality-store") as PersonalityStore;
+
+    if (!accountId || !store) {
+        return BASE_INSTRUCTIONS;  // Fallback for Studio
+    }
+
+    return buildInstructions(accountId, store, calendarService);
+},
+```
+
+### Memory Not Visible in Studio
+
+**Error:** Studio shows empty memory even after conversations
+
+**Solution:** Use correct thread/resource IDs and wait for storage persistence:
+
+```typescript
+// Ensure consistent IDs
+const response = await agent.generate(messages, {
+  memory: {
+    resource: accountId, // UUID from accounts table
+    thread: `tg-chat-${chatId}`, // Consistent threading convention
+  },
+});
+```
+
+Memory may take a few seconds to appear in Studio after conversations.
+
+## Build Issues
+
+### Generated Files in Git
+
+**Issue:** `routeTree.gen.ts`, `.source/` directories in git
+
+**Solution:** These are generated files that should be gitignored:
+
+```txt
+# TanStack Start generated routes
+apps/web/src/routeTree.gen.ts
+
+# Fumadocs generated collections
+apps/*/docs/.source/
+
+# Mastra build output
+apps/agent/.mastra/
+```
+
+If these files appear in git, remove them:
+
+```bash
+git rm --cached apps/web/src/routeTree.gen.ts
+git rm -r --cached apps/public-docs/.source/
+```
+
+### Turborepo Cache Issues
+
+**Error:** Stale build outputs or cached task failures
+
+**Solution:** Clear Turborepo cache:
+
+```bash
+# Clear all cache
+turbo run build --force
+
+# Or delete cache directory
+rm -rf node_modules/.cache/turbo
+```
+
+## Performance Issues
+
+### Large Vector Tables
+
+**Issue:** PgVector tables grow large over time, impacting performance
+
+**Monitoring:**
+
+```sql
+-- Check vector table sizes
+SELECT
+    relname as table_name,
+    pg_size_pretty(pg_total_relation_size(relid)) as total_size
+FROM pg_catalog.pg_statio_user_tables
+WHERE relname LIKE '%vector%'
+ORDER BY pg_total_relation_size(relid) DESC;
+```
+
+**Solution:** Configure vector retention policies in production (future feature).
+
+### Memory Usage in Long Conversations
+
+**Issue:** Working memory or observational memory grows unbounded
+
+**Solution:** Agent should self-manage memory size. Monitor via Mastra Studio and implement memory cleanup strategies.
+
+## Debugging Strategies
+
+### Database State Inspection
+
+```bash
+# Open Drizzle Studio
+pnpm db:studio  # http://localhost:4983
+
+# Connect to PostgreSQL directly
+docker exec -it huginn-postgres psql -U postgres -d huginn
+
+# Check all schemas
+\dn
+
+# List tables in each schema
+\dt public.*
+\dt mastra.*
+```
+
+### Service Health Checks
+
+```bash
+# Check all service endpoints
+curl http://localhost:3000      # Web app
+curl http://localhost:4111/health # Agent
+curl http://localhost:5000      # Public docs
+curl http://localhost:5001      # Private docs
+```
+
+### Environment Variable Debugging
+
+```bash
+# Check environment loading from specific location
+node -e "
+require('dotenv').config({ path: '.env' });
+Object.keys(process.env)
+  .filter(k => k.includes('DATABASE') || k.includes('OPENROUTER'))
+  .forEach(k => console.log(k, ':', process.env[k] ? 'SET' : 'MISSING'));
+"
+```
+
+### Log Tracking
+
+```bash
+# Follow all Docker logs
+docker compose logs -f
+
+# Follow specific service logs
+docker compose logs -f postgres
+
+# Agent service logs (if running in Docker)
+docker compose logs -f agent
+```
+
+## When All Else Fails
+
+### Nuclear Reset Option
+
+```bash
+# Delete everything and start fresh
+docker compose down -v          # Delete volumes
+rm -rf node_modules/            # Delete dependencies
+rm pnpm-lock.yaml               # Delete lockfile
+
+pnpm install                    # Reinstall
+docker compose up -d            # Recreate database
+pnpm db:push                    # Recreate schema
+```
+
+**Warning:** This deletes all local data including test accounts and conversations.
+
+### Get Help
+
+1. **Check logs first** — Most issues show clear error messages
+2. **Verify environment** — Missing variables cause 90% of startup problems
+3. **Check this page** — Most issues are documented here
+4. **Search the codebase** — Look for similar patterns and fixes
+5. **Create minimal reproduction** — Isolate the problem
+
+## Next Steps
+
+- **[Local Setup](/docs/development/local-setup)** — Prevent many of these issues with proper setup
+- **[Commands Reference](/docs/development/commands)** — Find the right command for debugging
+- **[RequestContext Pattern](/docs/patterns/request-context)** — Understand dependency injection to avoid context issues

@@ -1,0 +1,51 @@
+---
+title: How Huginn Remembers
+description: Understand the three memory systems Huginn uses to keep context across conversations.
+---
+
+Huginn doesn't treat each conversation as if it's the first time you've met. It maintains several layers of memory that work together to give you an assistant that actually gets better the more you use it.
+
+## The three memory layers
+
+### Semantic Memory
+
+Semantic memory is Huginn's long-term recall. Every conversation you have is stored and indexed. When you start a new conversation, Huginn automatically searches that history for anything relevant to what you're discussing.
+
+This is why Huginn might refer to something you mentioned weeks ago without you prompting it — it performed a similarity search across past conversations and found context that matters.
+
+**What it means for you:** Huginn builds a contextual history of everything you've discussed. You don't need to re-explain things you've told it before.
+
+### Working Memory
+
+Working memory is a persistent scratchpad that Huginn maintains for each user. It holds information that's actively relevant right now — your current priorities, deadlines you've mentioned, things you're waiting on, and temporary context like travel or time off.
+
+Unlike semantic memory (which stores everything and retrieves selectively), working memory is a small, actively-maintained summary. Huginn updates it during conversations when you mention things that should be tracked.
+
+**What it means for you:** If you tell Huginn you have a big presentation on Friday, it keeps that in working memory and may reference it when relevant in future conversations — even in a different chat thread.
+
+<Callout type="info">
+  Working memory is scoped to your account, not to a specific conversation. It persists across all
+  threads and channels.
+</Callout>
+
+### Observational Memory
+
+Observational memory is a layer that forms inside individual conversation threads. As a conversation progresses, Huginn observes patterns, extracts insights, and builds a thread-level understanding of what's happening.
+
+This makes long conversations more coherent — Huginn doesn't just look at the last few messages; it has a synthesised understanding of the whole thread.
+
+**What it means for you:** In a long, deep conversation, Huginn maintains coherence and can recall things from much earlier in the exchange.
+
+## How memory works across channels
+
+Your memory is attached to your Huginn account, not to any individual channel. Whether you chat via the web dashboard or Telegram, Huginn draws on the same semantic memory, the same working memory, and builds the same long-term picture of who you are and what you care about.
+
+<Callout type="info">
+  Each chat thread (a web session, a Telegram conversation) is independent for the purposes of
+  real-time context. But semantic and working memory cross thread boundaries, so Huginn's broader
+  understanding of you is always intact.
+</Callout>
+
+## Privacy
+
+All memory is private to your account. Huginn does not share memory between users. Your conversation history, working memory, and observations are stored securely and associated only with your account ID.

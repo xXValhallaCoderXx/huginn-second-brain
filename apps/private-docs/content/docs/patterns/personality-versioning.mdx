@@ -1,0 +1,440 @@
+---
+title: Personality Versioning Pattern
+description: Append-only versioning system for SOUL.md and IDENTITY.md files with complete edit history and rollback capability.
+---
+
+# Personality Versioning Pattern
+
+Huginn uses **append-only versioning** for personality files. Instead of updating existing records, every edit creates a new version. This provides complete audit history and enables rollback to any previous state.
+
+## The Pattern
+
+### Never UPDATE, Always INSERT
+
+```sql
+-- ❌ NEVER do this
+UPDATE personality_files SET content = 'new content' WHERE account_id = ? AND file_type = 'SOUL';
+
+-- ✅ ALWAYS do this
+INSERT INTO personality_files (account_id, file_type, content, version, reason)
+VALUES (?, 'SOUL', 'new content', next_version, 'Updated personality');
+```
+
+### Schema Design
+
+```sql
+-- From packages/shared/src/schema/personality-files.ts
+CREATE TABLE personality_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    file_type TEXT NOT NULL,  -- 'SOUL' | 'IDENTITY'
+    content TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    reason TEXT,  -- Why this version was created
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Key Constraints:**
+
+- No unique constraint on `(account_id, file_type)` — multiple versions allowed
+- Version numbers are per `(account_id, file_type)` pair
+- Latest version = `MAX(version)` for each pair
+
+## PersonalityStore Implementation
+
+### Load Latest Version
+
+```typescript
+// From packages/shared/src/services/personality-store.ts
+async load(accountId: string, file: "SOUL" | "IDENTITY"): Promise<string | null> {
+    const row = await db.query.personalityFiles.findFirst({
+        where: and(
+            eq(personalityFiles.accountId, accountId),
+            eq(personalityFiles.fileType, file),
+        ),
+        orderBy: desc(personalityFiles.version), // Latest first
+    });
+    return row ? row.content : null;
+}
+```
+
+### Save New Version
+
+```typescript
+async save(accountId: string, file: "SOUL" | "IDENTITY", content: string, reason?: string): Promise<void> {
+    // Get current max version for this (accountId, fileType) pair
+    const [current] = await db
+        .select({
+            maxVersion: sql<number>`coalesce(max(${personalityFiles.version}), 0)`
+        })
+        .from(personalityFiles)
+        .where(and(
+            eq(personalityFiles.accountId, accountId),
+            eq(personalityFiles.fileType, file),
+        ));
+
+    const nextVersion = (current?.maxVersion ?? 0) + 1;
+
+    // Insert new version (never update existing)
+    await db.insert(personalityFiles).values({
+        accountId,
+        fileType: file,
+        content,
+        version: nextVersion,
+        reason,
+    });
+}
+```
+
+### Version History
+
+```typescript
+async history(accountId: string, file: "SOUL" | "IDENTITY", limit = 10): Promise<VersionEntry[]> {
+    const rows = await db
+        .select({
+            version: personalityFiles.version,
+            content: personalityFiles.content,
+            reason: personalityFiles.reason,
+            createdAt: personalityFiles.createdAt,
+        })
+        .from(personalityFiles)
+        .where(and(
+            eq(personalityFiles.accountId, accountId),
+            eq(personalityFiles.fileType, file),
+        ))
+        .orderBy(desc(personalityFiles.version))
+        .limit(limit);
+
+    return rows.map((r): VersionEntry => ({
+        version: r.version,
+        content: r.content,
+        reason: r.reason,
+        createdAt: r.createdAt.toISOString(),
+    }));
+}
+```
+
+## Web UI Integration
+
+### Save with Reason
+
+```typescript
+// From apps/web/src/lib/server-fns.ts
+export const savePersonalityFile = createServerFn({ method: "POST" })
+  .inputValidator(
+    z.object({
+      fileType: z.enum(["SOUL", "IDENTITY"]),
+      content: z.string(),
+      reason: z.string().optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const account = await resolveAuthenticatedAccount();
+    const store = createPersonalityStore(db);
+
+    await store.save(
+      account.id,
+      data.fileType,
+      data.content,
+      data.reason || "Updated via web interface",
+    );
+  });
+```
+
+### Version History UI
+
+```typescript
+// From apps/web/src/components/edit-identity-page.tsx (simplified)
+export function EditIdentityPage() {
+    const [showHistory, setShowHistory] = useState(false);
+    const history = useQuery({
+        queryKey: ["personality-history", fileType],
+        queryFn: () => getPersonalityHistory(fileType),
+    });
+
+    return (
+        <div>
+            <textarea value={content} onChange={handleChange} />
+
+            <button onClick={() => saveFile(content, reason)}>
+                Save New Version
+            </button>
+
+            <button onClick={() => setShowHistory(!showHistory)}>
+                {showHistory ? "Hide" : "Show"} History
+            </button>
+
+            {showHistory && (
+                <div className="history-panel">
+                    {history.data?.map((version) => (
+                        <div key={version.version} className="version-entry">
+                            <div>v{version.version} - {version.reason}</div>
+                            <div>{new Date(version.createdAt).toLocaleString()}</div>
+                            <button onClick={() => rollbackToVersion(version)}>
+                                Rollback to this version
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+```
+
+## Benefits of Append-Only Versioning
+
+### 1. Complete Audit Trail
+
+**Track evolution of personality over time:**
+
+```sql
+SELECT version, reason, created_at, length(content) as chars
+FROM personality_files
+WHERE account_id = ? AND file_type = 'SOUL'
+ORDER BY version DESC;
+```
+
+**Example output:**
+
+```
+version | reason                          | created_at          | chars
+--------|--------------------------------|---------------------|-------
+   3    | Added preference for bullet pts | 2024-01-15 14:30:00 |  1250
+   2    | Refined communication style     | 2024-01-10 09:15:00 |  1180
+   1    | Initial seed                    | 2024-01-05 16:00:00 |  1050
+```
+
+### 2. Safe Rollback
+
+**Rollback is just loading an older version:**
+
+```typescript
+async rollbackToVersion(accountId: string, file: "SOUL" | "IDENTITY", targetVersion: number, reason: string): Promise<void> {
+    // Get content from target version
+    const targetRow = await db.query.personalityFiles.findFirst({
+        where: and(
+            eq(personalityFiles.accountId, accountId),
+            eq(personalityFiles.fileType, file),
+            eq(personalityFiles.version, targetVersion),
+        ),
+    });
+
+    if (!targetRow) throw new Error(`Version ${targetVersion} not found`);
+
+    // Save as new version (append-only principle maintained)
+    await this.save(accountId, file, targetRow.content, reason);
+}
+```
+
+### 3. No Data Loss
+
+**Accidental edits can always be recovered:**
+
+- User accidentally deletes personality content
+- Bad edit makes agent behave incorrectly
+- Want to compare different personality iterations
+- Need to understand when/why personality changed
+
+### 4. A/B Testing Personalities
+
+**Test different personalities and revert if needed:**
+
+```typescript
+// Save experimental personality
+await store.save(accountId, "SOUL", experimentalContent, "Testing: more assertive tone");
+
+// Use for a few conversations...
+
+// Revert if not working well
+await store.rollbackToVersion(accountId, "SOUL", previousVersion, "Reverting: too assertive");
+```
+
+## Default Seeding
+
+### New Account Setup
+
+```typescript
+// From apps/web/src/lib/server-fns.ts
+const DEFAULT_SOUL_CONTENT = `# SOUL
+
+You are a thoughtful, helpful AI assistant. You:
+
+- Communicate clearly and concisely
+- Ask clarifying questions when context is unclear  
+- Prioritize the user's actual needs over assumptions
+- Maintain a warm but professional tone
+- Remember context from previous conversations
+
+## Communication Style
+
+- Use bullet points for complex information
+- Avoid jargon unless the user demonstrates familiarity
+- Acknowledge uncertainty rather than guessing
+`;
+
+const DEFAULT_IDENTITY_CONTENT = `# IDENTITY
+
+## About the User
+
+*This will be filled in as I learn about you through our conversations.*
+
+## Preferences
+
+- Communication style: [to be discovered]
+- Preferred level of detail: [to be discovered]  
+- Areas of focus: [to be discovered]
+
+## Context & History
+
+*Important context, ongoing projects, and key insights will accumulate here.*
+`;
+
+export async function seedNewAccount(db: Database, accountId: string): Promise<void> {
+  const store = createPersonalityStore(db);
+
+  await store.save(accountId, "SOUL", DEFAULT_SOUL_CONTENT, "Initial seed");
+  await store.save(accountId, "IDENTITY", DEFAULT_IDENTITY_CONTENT, "Initial seed");
+}
+```
+
+## Advanced Patterns
+
+### Automatic Versioning with Observational Memory
+
+**Future enhancement:** Agent could auto-update personality based on observational memory insights:
+
+```typescript
+// Hypothetical: Auto-evolution from observational memory
+async function evolvePersonalityFromObservations(
+  accountId: string,
+  observations: Observation[],
+): Promise<void> {
+  const currentIdentity = await store.load(accountId, "IDENTITY");
+  const updatedIdentity = await llm.generate(
+    `Update this IDENTITY file based on these observations:\n\n${observations.join("\n")}\n\nCurrent IDENTITY:\n${currentIdentity}`,
+  );
+
+  await store.save(
+    accountId,
+    "IDENTITY",
+    updatedIdentity,
+    "Auto-updated from observational memory insights",
+  );
+}
+```
+
+### Content Diffing
+
+**Track what changed between versions:**
+
+```typescript
+import { diffLines } from "diff";
+
+function getVersionDiff(oldContent: string, newContent: string) {
+  const diff = diffLines(oldContent, newContent);
+
+  return diff.map((part) => ({
+    added: part.added || false,
+    removed: part.removed || false,
+    value: part.value,
+  }));
+}
+
+// Usage in UI
+const diff = getVersionDiff(history[1].content, history[0].content);
+```
+
+### Branching/Merging (Future)
+
+**Experimental:** Support personality branches for different contexts:
+
+```sql
+-- Hypothetical schema extension
+ALTER TABLE personality_files ADD COLUMN branch TEXT DEFAULT 'main';
+ALTER TABLE personality_files ADD COLUMN parent_version INTEGER;
+
+-- Could support SOUL.work, SOUL.personal, etc.
+```
+
+## Performance Considerations
+
+### Version Growth
+
+**Personality files are small (1-5KB) and infrequently updated:**
+
+- 100 versions per file = ~500KB total
+- Reasonable for years of personality evolution
+- Database cleanup rarely needed
+
+### Query Optimization
+
+**Latest version queries are fast:**
+
+```sql
+-- Efficient with index on (account_id, file_type, version DESC)
+CREATE INDEX idx_personality_latest ON personality_files (account_id, file_type, version DESC);
+```
+
+**History queries limited by default:**
+
+```typescript
+async history(accountId: string, file: string, limit = 10): Promise<VersionEntry[]>
+// Default limit prevents unbounded queries
+```
+
+## Testing Strategy
+
+### Unit Tests
+
+```typescript
+// Test versioning behavior
+test("personality versioning increments correctly", async () => {
+  const store = createPersonalityStore(testDb);
+  const accountId = "test-account";
+
+  await store.save(accountId, "SOUL", "Version 1", "First save");
+  await store.save(accountId, "SOUL", "Version 2", "Second save");
+  await store.save(accountId, "SOUL", "Version 3", "Third save");
+
+  const latest = await store.load(accountId, "SOUL");
+  expect(latest).toBe("Version 3");
+
+  const history = await store.history(accountId, "SOUL");
+  expect(history).toHaveLength(3);
+  expect(history[0].version).toBe(3); // Latest first
+  expect(history[1].version).toBe(2);
+  expect(history[2].version).toBe(1);
+});
+```
+
+### Integration Tests
+
+```typescript
+// Test rollback behavior
+test("rollback creates new version with old content", async () => {
+  const store = createPersonalityStore(testDb);
+  const accountId = "test-account";
+
+  await store.save(accountId, "SOUL", "Version 1", "Initial");
+  await store.save(accountId, "SOUL", "Version 2", "Update");
+  await store.save(accountId, "SOUL", "Version 3", "Bad update");
+
+  // Rollback to version 1
+  await store.rollbackToVersion(accountId, "SOUL", 1, "Rollback to initial");
+
+  const latest = await store.load(accountId, "SOUL");
+  expect(latest).toBe("Version 1"); // Content from v1
+
+  const history = await store.history(accountId, "SOUL");
+  expect(history[0].version).toBe(4); // New version number
+  expect(history[0].reason).toBe("Rollback to initial");
+});
+```
+
+## Next Steps
+
+- **[Token Encryption](/docs/patterns/token-encryption)** — How OAuth tokens are versioned and secured
+- **[Calendar OAuth](/docs/patterns/calendar-oauth)** — Multi-provider OAuth with versioned connections
+- **[PersonalityStore Service](/docs/services/personality-store)** — Complete API reference

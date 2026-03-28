@@ -1,0 +1,73 @@
+---
+title: Google Calendar Integration
+description: Connect your Google Calendar so Huginn knows your schedule and can help you manage your day.
+---
+
+When you connect a Google Calendar, Huginn automatically knows what's on your schedule today. You can ask about upcoming events in any conversation and get answers grounded in your actual calendar — no copy-pasting required.
+
+## Connecting Google Calendar
+
+<Steps>
+<Step>
+### Go to Calendars
+
+Click **Calendars** in the top navigation. If you haven't connected anything yet, you'll see an empty state with an option to add a calendar.
+
+</Step>
+<Step>
+### Click Google Calendar
+
+Under **Add a calendar**, click the **Google Calendar** button. You'll be redirected to Google's OAuth consent screen.
+
+</Step>
+<Step>
+### Authorise access
+
+Google will ask you to confirm that Huginn can read your calendar events. Huginn requests **read-only** access — it can see your events but cannot create, edit, or delete anything.
+
+<Callout type="info">
+  Only calendars where you are the owner or have edit access are included. Subscribed or read-only
+  calendars (like public holiday calendars) are excluded.
+</Callout>
+
+</Step>
+<Step>
+### Return to Huginn
+
+After authorising, you'll be redirected back to the Calendars page with a confirmation message: **Google Calendar connected successfully!**
+
+Your calendar connection now appears in the list.
+
+</Step>
+</Steps>
+
+## Managing connections
+
+Each connected calendar appears as a card in the Calendars list. You can:
+
+- **Enable or disable** a connection using the toggle — disabling it stops Huginn from reading those events without removing the connection entirely.
+- **Rename** the connection to something memorable (for example, "Work Google" vs "Personal Google").
+- **Remove** the connection entirely if you no longer want Huginn to have calendar access.
+
+<Callout type="warn">
+  Removing a calendar connection is permanent. You'll need to go through the OAuth flow again to
+  reconnect.
+</Callout>
+
+## Connecting multiple accounts
+
+You can connect more than one Google Calendar account. Each account connection appears separately in the list and can be toggled or removed independently. Huginn aggregates events from all enabled connections.
+
+## Outlook Calendar
+
+Outlook Calendar support is planned. It is not currently available. You'll see an **Outlook Calendar (Coming soon)** option on the Calendars page.
+
+## How the calendar is used
+
+Once connected, Huginn uses your calendar in two ways:
+
+**Automatic context injection.** At the start of every conversation, Huginn loads today's events from all enabled calendars. It knows what's on your day without you having to mention it. This context refreshes approximately every 5 minutes.
+
+**On-demand schedule queries.** When you ask about your schedule — for a specific date, a range of days, or relative periods like "this week" or "next Tuesday" — Huginn fetches the relevant events and answers based on your actual calendar data.
+
+Events where you have declined the invitation are excluded automatically.

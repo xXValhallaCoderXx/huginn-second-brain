@@ -14,6 +14,12 @@ app.config.timestamp_*
 # Turbo
 .turbo/
 
+# Next.js
+.next/
+
+# Fumadocs MDX generated
+.source/
+
 # Environment
 .env
 .env.local
