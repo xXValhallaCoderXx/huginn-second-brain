@@ -1,0 +1,399 @@
+---
+title: RequestContext Pattern
+description: How per-request dependency injection works in Mastra agents to provide account-specific personality and services.
+---
+
+# RequestContext Pattern
+
+Huginn uses **Mastra's RequestContext** for per-request dependency injection. This ensures each agent request has isolated access to the correct user's personality, calendar, and services.
+
+## The Problem
+
+**Multi-tenant agent:** The same agent instance serves many users, but each request needs:
+
+- **Account-specific personality** (SOUL.md, IDENTITY.md)
+- **User's calendar data** (OAuth tokens, connections)
+- **Scoped memory** (working memory, semantic recall)
+- **Service isolation** (no cross-user data leakage)
+
+**Traditional solutions** like global state, singleton services, or thread-local storage don't work in Node.js async environments.
+
+## RequestContext Solution
+
+**Mastra's RequestContext** is a request-scoped key-value store that travels with each agent call:
+
+```typescript
+// From apps/agent/src/mastra/agents/huginn.ts
+export type HuginnContext = {
+    "account-id": string;
+    "personality-store": PersonalityStore;
+    "calendar-service"?: CalendarService;
+};
+
+// Agent uses context to build dynamic instructions
+instructions: async ({ requestContext }) => {
+    const accountId = requestContext?.get("account-id") as string;
+    const store = requestContext?.get("personality-store") as PersonalityStore;
+    const calendarService = requestContext?.get("calendar-service") as CalendarService;
+
+    if (!accountId || !store) {
+        return BASE_INSTRUCTIONS;  // Fallback for Studio introspection
+    }
+
+    return buildInstructions(accountId, store, calendarService);
+},
+```
+
+## Injection Points
+
+### 1. Web Chat Endpoint
+
+```typescript
+// apps/web/server/api/chat/[...].ts (simplified)
+export default defineEventHandler(async (event) => {
+  const { message, threadId } = await readBody(event);
+
+  // Resolve authenticated account
+  const account = await resolveAuthenticatedAccount();
+
+  // Create request context with user-specific services
+  const requestContext = new RequestContext();
+  requestContext.set("account-id", account.id);
+  requestContext.set("personality-store", createPersonalityStore(db));
+  requestContext.set("calendar-service", createCalendarService(db));
+
+  // Agent call with injected context
+  const response = await huginnAgent.generate([{ role: "user", content: message }], {
+    requestContext,
+    memory: {
+      resource: account.id,
+      thread: threadId,
+    },
+  });
+
+  return { text: response.text };
+});
+```
+
+### 2. Telegram Bot Handler
+
+```typescript
+// apps/agent/src/telegram/handlers.ts (simplified)
+async function handleMessage(ctx: Context) {
+  const telegramUserId = String(ctx.from.id);
+
+  // Resolve Telegram user → Huginn account
+  const account = await accountService.resolveAccountFromChannel("telegram", telegramUserId);
+
+  if (!account) {
+    await ctx.reply("Please link your account first with /link CODE");
+    return;
+  }
+
+  // Create request context for this user
+  const requestContext = new RequestContext();
+  requestContext.set("account-id", account.id);
+  requestContext.set("personality-store", createPersonalityStore(db));
+  requestContext.set("calendar-service", createCalendarService(db));
+
+  // Agent call with context
+  const response = await huginnAgent.generate([{ role: "user", content: ctx.message.text }], {
+    requestContext,
+    memory: {
+      resource: account.id,
+      thread: `tg-chat-${ctx.chat.id}`,
+    },
+  });
+
+  await ctx.reply(response.text);
+}
+```
+
+### 3. Workflow Execution (Daily Briefing)
+
+```typescript
+// apps/agent/src/workflows/daily-briefing.ts (generateBriefing step)
+const generateBriefing = createStep({
+  id: "generate-briefing",
+  // ...
+  execute: async ({ inputData, mastra, requestContext }) => {
+    const { accountId } = inputData;
+
+    // Create agent request context for personality injection
+    const agentRequestContext = new RequestContext();
+    agentRequestContext.set("account-id", accountId);
+    agentRequestContext.set(
+      "personality-store",
+      requestContext!.get("personality-store") as PersonalityStore,
+    );
+    agentRequestContext.set(
+      "calendar-service",
+      requestContext!.get("calendar-service") as CalendarService,
+    );
+
+    // Agent call inherits personality + calendar context
+    const response = await agent.generate([{ role: "user", content: prompt }], {
+      requestContext: agentRequestContext,
+      memory: {
+        resource: accountId,
+        thread: `briefing-${accountId}-${dateStr}`,
+      },
+    });
+
+    return { briefingText: response.text };
+  },
+});
+```
+
+## Dynamic Instructions Implementation
+
+The heart of the pattern is **context-aware instruction building:**
+
+```typescript
+// apps/agent/src/identity/instructions.ts
+export async function buildInstructions(
+  accountId: string,
+  store: PersonalityStore,
+  calendarService?: CalendarService,
+): Promise<string> {
+  // Load user-specific personality files
+  const [soul, identity] = await Promise.all([
+    store.load(accountId, "SOUL"), // User's SOUL.md
+    store.load(accountId, "IDENTITY"), // User's IDENTITY.md
+  ]);
+
+  // Inject today's calendar context
+  let calendarBlock = "";
+  if (calendarService) {
+    try {
+      let events = getCachedEvents(accountId);
+      if (!events) {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+        events = await calendarService.getEvents(accountId, {
+          start: startOfDay,
+          end: endOfDay,
+        });
+        setCachedEvents(accountId, events); // 5min cache
+      }
+      calendarBlock = calendarService.formatForContext(events);
+    } catch (err) {
+      console.warn("[buildInstructions] Calendar fetch failed:", err);
+    }
+  }
+
+  // Add current date context
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+  const dateContext = `Today is ${dateStr}.`;
+
+  // Combine all context into system prompt
+  return [soul, identity, calendarBlock, dateContext, BASE_INSTRUCTIONS]
+    .filter(Boolean)
+    .join("\n\n---\n\n");
+}
+```
+
+## Memory Scoping Integration
+
+RequestContext works seamlessly with Mastra's memory system:
+
+```typescript
+// All memory layers automatically scoped by resourceId
+const response = await agent.generate(messages, {
+  requestContext, // Contains account-id and services
+  memory: {
+    resource: account.id, // Working memory + semantic recall scope
+    thread: threadId, // Observational memory scope
+  },
+});
+```
+
+**Memory Behavior:**
+
+- **Semantic Recall:** Searches across all threads for this `resourceId`
+- **Working Memory:** Persistent per `resourceId`, survives across threads
+- **Observational Memory:** Scoped per thread, but same `resourceId`
+
+## Service Isolation Benefits
+
+### 1. No Cross-User Data Leakage
+
+```typescript
+// Each request gets isolated service instances
+const store1 = createPersonalityStore(db); // Request 1
+const store2 = createPersonalityStore(db); // Request 2
+
+// store1.load(accountId1) can never see accountId2's data
+// Database queries are naturally scoped by accountId parameter
+```
+
+### 2. OAuth Token Isolation
+
+```typescript
+// Calendar service automatically uses correct user's tokens
+const calendarServiceUser1 = createCalendarService(db);
+const events = await calendarServiceUser1.getEvents(accountId1, range);
+// ^ Only fetches from accountId1's connected calendars
+```
+
+### 3. Personality Isolation
+
+```typescript
+// Agent instructions built from correct user's personality files
+const soul = await store.load(accountId, "SOUL"); // User-specific
+const identity = await store.load(accountId, "IDENTITY"); // User-specific
+```
+
+## Testing the Pattern
+
+### Unit Testing Services
+
+```typescript
+// Test service isolation
+import { createPersonalityStore } from "@huginn/shared";
+
+test("personality store scoped by account", async () => {
+  const store = createPersonalityStore(testDb);
+
+  await store.save("account-1", "SOUL", "Content for user 1", "test");
+  await store.save("account-2", "SOUL", "Content for user 2", "test");
+
+  const soul1 = await store.load("account-1", "SOUL");
+  const soul2 = await store.load("account-2", "SOUL");
+
+  expect(soul1).toBe("Content for user 1");
+  expect(soul2).toBe("Content for user 2");
+  expect(soul1).not.toBe(soul2); // Isolated
+});
+```
+
+### Integration Testing Context Injection
+
+```typescript
+// Test agent with different contexts
+test("agent uses correct personality per context", async () => {
+  const context1 = new RequestContext();
+  context1.set("account-id", "account-1");
+  context1.set("personality-store", store);
+
+  const context2 = new RequestContext();
+  context2.set("account-id", "account-2");
+  context2.set("personality-store", store);
+
+  const response1 = await agent.generate([message], { requestContext: context1 });
+  const response2 = await agent.generate([message], { requestContext: context2 });
+
+  // Responses should reflect different personalities
+  expect(response1.text).not.toBe(response2.text);
+});
+```
+
+## Common Pitfalls
+
+### 1. Missing Context Guard
+
+```typescript
+// ❌ BAD: Will crash if context missing
+instructions: async ({ requestContext }) => {
+    const accountId = requestContext.get("account-id") as string;
+    // ^ Crashes if Studio calls without context
+
+// ✅ GOOD: Guard against missing context
+instructions: async ({ requestContext }) => {
+    const accountId = requestContext?.get("account-id") as string;
+    if (!accountId) return BASE_INSTRUCTIONS;  // Fallback
+```
+
+### 2. Forgetting Context in Workflows
+
+```typescript
+// ❌ BAD: Workflow step calls agent without context
+const response = await agent.generate([...]);  // No context!
+
+// ✅ GOOD: Pass context through workflow
+const agentContext = new RequestContext();
+agentContext.set("account-id", accountId);
+agentContext.set("personality-store", workflowContext.get("personality-store"));
+
+const response = await agent.generate([...], { requestContext: agentContext });
+```
+
+### 3. Context Type Mismatches
+
+```typescript
+// ❌ BAD: Wrong type casting
+const store = requestContext?.get("personality-store") as CalendarService; // Wrong!
+
+// ✅ GOOD: Correct type casting
+const store = requestContext?.get("personality-store") as PersonalityStore;
+const calendarSvc = requestContext?.get("calendar-service") as CalendarService;
+```
+
+## Performance Considerations
+
+### Service Creation Cost
+
+Service creation is **lightweight** — mostly function wrappers around database connection:
+
+```typescript
+// Very fast - just returns object with methods
+const store = createPersonalityStore(db);
+const calendarSvc = createCalendarService(db);
+```
+
+### Caching Strategy
+
+**Calendar context caching** prevents repeated API calls:
+
+```typescript
+// From apps/agent/src/calendar-cache.ts
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+export function getCachedEvents(accountId: string): CalendarEvent[] | null {
+  const key = `cal-${accountId}`;
+  const cached = cache.get(key);
+  return cached && Date.now() - cached.timestamp < CACHE_TTL ? cached.events : null;
+}
+```
+
+**No personality caching** needed — database queries are fast and personality changes infrequently.
+
+## Alternative Patterns (Not Used)
+
+### Global State (❌ Rejected)
+
+```typescript
+// ❌ Would cause cross-user data leakage
+let currentAccountId: string;
+let currentPersonalityStore: PersonalityStore;
+
+// Different requests would overwrite global state
+```
+
+### ThreadLocal (❌ Not Available)
+
+```typescript
+// ❌ Node.js doesn't have true thread-local storage
+// async_hooks has performance and reliability issues
+```
+
+### Middleware Chain (❌ Too Complex)
+
+```typescript
+// ❌ Would require complex middleware chain
+// Mastra's RequestContext is simpler and more direct
+```
+
+## Next Steps
+
+- **[Personality Versioning](/docs/patterns/personality-versioning)** — How personality files are managed per account
+- **[Token Encryption](/docs/patterns/token-encryption)** — How OAuth tokens are secured per account
+- **[Memory Stack](/docs/architecture/memory-stack)** — How memory is scoped by resourceId

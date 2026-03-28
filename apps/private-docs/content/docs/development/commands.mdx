@@ -1,0 +1,462 @@
+---
+title: Development Commands Reference
+description: Complete reference for all pnpm scripts, Turborepo commands, database operations, and development tools.
+---
+
+# Development Commands Reference
+
+Complete reference for all development commands in the Huginn monorepo.
+
+## Package Manager
+
+Huginn uses **pnpm workspaces** with Turborepo for task orchestration.
+
+### Installation
+
+```bash
+# Install all workspace dependencies
+pnpm install
+
+# Install dependency in specific workspace
+pnpm add --filter @huginn/web some-package
+pnpm add --filter @huginn/agent some-package
+pnpm add --filter @huginn/shared some-package
+
+# Install dev dependency
+pnpm add -D --filter @huginn/web some-dev-package
+```
+
+## Development Servers
+
+### All Services
+
+```bash
+# Start all services simultaneously (web + agent + docs)
+pnpm dev
+```
+
+This runs via Turborepo with `persistent: true` — **blocks the terminal**. Services:
+
+- **Web:** http://localhost:3000 (TanStack Start)
+- **Agent:** http://localhost:4111 (Hono + Mastra)
+- **Public Docs:** http://localhost:5000 (Next.js)
+- **Private Docs:** http://localhost:5001 (Next.js)
+
+### Individual Services
+
+```bash
+# Web dashboard only
+pnpm --filter @huginn/web dev
+
+# Agent service only
+pnpm --filter @huginn/agent dev
+
+# Public documentation
+pnpm dev:public-docs
+
+# Private documentation (this site)
+pnpm dev:private-docs
+```
+
+## Database Operations
+
+### Drizzle ORM
+
+```bash
+# Push schema to database (development)
+pnpm db:push
+
+# Generate migration files from schema changes
+pnpm db:generate
+
+# Apply migrations (production)
+pnpm db:migrate
+
+# Open Drizzle Studio database GUI
+pnpm db:studio                     # http://localhost:4983
+```
+
+**Migration Workflow:**
+
+1. Modify schema files in `packages/shared/src/schema/`
+2. Run `pnpm db:generate` to create migration
+3. Review generated SQL in `packages/shared/drizzle/`
+4. Run `pnpm db:migrate` in production (or `pnpm db:push` in development)
+
+### PostgreSQL Management
+
+```bash
+# Start database with Docker
+docker compose up -d
+
+# View database logs
+docker compose logs postgres
+
+# Connect to database directly
+docker exec -it huginn-postgres psql -U postgres -d huginn
+
+# Reset database (nuclear option)
+docker compose down -v && docker compose up -d
+```
+
+## Building & Testing
+
+### Build Commands
+
+```bash
+# Build all packages
+pnpm build
+
+# Build specific package
+pnpm --filter @huginn/web build
+pnpm --filter @huginn/agent build
+pnpm --filter @huginn/public-docs build
+pnpm --filter @huginn/private-docs build
+
+# Build with clean cache
+pnpm build -- --force
+```
+
+### Linting & Code Quality
+
+```bash
+# Lint all packages
+pnpm lint
+
+# Lint specific package
+pnpm --filter @huginn/web lint
+pnpm --filter @huginn/agent lint
+
+# Auto-fix linting issues
+pnpm lint -- --fix
+```
+
+**ESLint Configuration:** [`eslint.config.js`](file:///home/nate/Dungeon/Personal/huginn-second-brain/eslint.config.js) at monorepo root.
+
+## Mastra Tools
+
+### Mastra Studio
+
+```bash
+# Start Mastra Studio (requires agent service running)
+pnpm --filter @huginn/agent dev:studio
+
+# Or from agent directory
+cd apps/agent
+mastra studio --server-port 4111 --port 3001
+```
+
+**Studio URL:** http://localhost:3001
+
+**Features:**
+
+- Agent configuration inspector
+- Memory browser (threads, working memory, observations)
+- Tools testing interface
+- Workflow execution viewer
+- Observability traces
+
+<Callout type="warn">
+  **Don't use `mastra dev`** — it creates an isolated server that ignores the Hono adapter setup.
+  Use `pnpm --filter @huginn/agent dev:studio` instead.
+</Callout>
+
+### Workflow Testing
+
+```bash
+# Run daily briefing workflow manually (from agent directory)
+cd apps/agent
+node -e "
+const { mastra } = require('./dist/mastra/index.js');
+const { RequestContext } = require('@mastra/core/request-context');
+
+const ctx = new RequestContext();
+ctx.set('account-id', 'your-account-id');
+// Add other required context...
+
+mastra.getWorkflow('daily-briefing').run({
+    accountId: 'your-account-id',
+    telegramChatId: 'your-chat-id'
+}, ctx);
+"
+```
+
+## Package-Specific Commands
+
+### Web App (`apps/web`)
+
+```bash
+cd apps/web
+
+# Development server
+pnpm dev                          # TanStack Start dev server
+
+# Build for production
+pnpm build                        # Generates dist/ folder
+
+# Routes generation
+pnpm routes                       # Regenerate routeTree.gen.ts
+
+# Type checking
+pnpm type-check
+```
+
+**Route Generator:** TanStack Start auto-generates [`src/routeTree.gen.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/routeTree.gen.ts) — never edit manually.
+
+### Agent Service (`apps/agent`)
+
+```bash
+cd apps/agent
+
+# development server with hot reload
+pnpm dev                          # tsx watch src/index.ts
+
+# Build for production
+pnpm build                        # TypeScript compilation
+
+# Start production build
+pnpm start                        # node dist/index.js
+
+# Mastra Studio
+pnpm dev:studio                   # Connect to running agent
+```
+
+### Documentation Sites
+
+```bash
+# Public docs (customer-facing)
+pnpm dev:public-docs              # Next.js dev server (port 5000)
+pnpm build:public-docs            # Build for production
+
+# Private docs (internal engineering)
+pnpm dev:private-docs             # Next.js dev server (port 5001)
+pnpm build:private-docs           # Build for production
+```
+
+**Content Directories:**
+
+- Public: [`apps/public-docs/content/docs/`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/public-docs/content/docs)
+- Private: [`apps/private-docs/content/docs/`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/private-docs/content/docs)
+
+## Environment Management
+
+### Environment Files
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Load environment variables in Node.js (server-side modules)
+node -e "require('dotenv').config(); console.log(process.env.DATABASE_URL)"
+```
+
+**Environment Hierarchy:**
+
+1. `.env` — Local development (gitignored)
+2. `.env.example` — Template with placeholders (committed)
+3. Railway/production — Environment variables via platform
+
+### Generate Required Secrets
+
+```bash
+# Better Auth secret (for JWT signing)
+openssl rand -base64 32
+
+# Calendar encryption key (32 bytes hex)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Random UUID (for testing)
+node -e "console.log(require('crypto').randomUUID())"
+```
+
+## Docker Operations
+
+### Local Development
+
+```bash
+# Start PostgreSQL with PgVector
+docker compose up -d
+
+# View all container status
+docker compose ps
+
+# View logs
+docker compose logs postgres
+docker compose logs -f postgres    # Follow/tail logs
+
+# Stop without removing volumes
+docker compose stop
+
+# Start after stop
+docker compose start
+
+# Complete cleanup (removes volumes/data)
+docker compose down -v
+```
+
+### Production Deployment
+
+```bash
+# Build production images
+docker compose -f docker-compose.prod.yml build
+
+# Run production stack
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## Turborepo Commands
+
+### Task Execution
+
+```bash
+# Run task across all packages
+turbo run build
+turbo run lint
+turbo run type-check
+
+# Run task for specific package
+turbo run build --filter=@huginn/web
+turbo run dev --filter=@huginn/agent
+
+# Clear Turborepo cache
+turbo run build --force
+```
+
+### Cache Management
+
+```bash
+# Clear all Turborepo cache
+rm -rf node_modules/.cache/turbo
+
+# View cache status
+turbo run build --dry-run
+```
+
+**Caching:** Turborepo caches task outputs based on input file hashes. Cache invalidated automatically when source files change.
+
+## Git Workflow
+
+### Conventional Commits
+
+```bash
+# Feature commits
+git commit -m "feat(web): add calendar oauth flow"
+git commit -m "feat(agent): implement daily briefing workflow"
+
+# Fix commits
+git commit -m "fix(shared): resolve drizzle schema export issue"
+
+# Documentation
+git commit -m "docs(private): add memory stack architecture page"
+
+# Refactoring
+git commit -m "refactor(agent): extract request context helper"
+```
+
+### Release Workflow
+
+```bash
+# Create feature branch
+git checkout -b feature/calendar-integration
+
+# Work in small commits
+git add . && git commit -m "feat(shared): add calendar connection schema"
+git add . && git commit -m "feat(web): implement oauth callback route"
+
+# Push and create PR
+git push -u origin feature/calendar-integration
+```
+
+## Debugging Commands
+
+### Database Debugging
+
+```bash
+# Connect to local PostgreSQL
+docker exec -it huginn-postgres psql -U postgres -d huginn
+
+# List all tables
+\dt public.*         # Application tables
+\dt mastra.*         # Agent memory tables
+
+# Describe table structure
+\d accounts
+\d personality_files
+
+# Raw SQL queries
+SELECT id, email FROM accounts;
+```
+
+### Service Health Checks
+
+```bash
+# Check all service health
+curl http://localhost:3000/api/health  # Web app
+curl http://localhost:4111/health      # Agent service
+curl http://localhost:5000/           # Public docs
+curl http://localhost:5001/           # Private docs
+
+# Test agent chat endpoint
+curl -X POST http://localhost:4111/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hello",
+    "accountId": "test-account-id",
+    "threadId": "test-thread"
+  }'
+```
+
+### Environment Debugging
+
+```bash
+# Check environment variable loading
+node -e "
+require('dotenv').config({ path: '.env' });
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Missing');
+console.log('OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? 'Set' : 'Missing');
+"
+
+# Test database connection
+node -e "
+require('dotenv').config();
+const postgres = require('postgres');
+const sql = postgres(process.env.DATABASE_URL);
+sql\`SELECT 1\`.then(() => console.log('DB connected')).catch(console.error);
+"
+```
+
+## Production Commands
+
+### Railway Deployment
+
+```bash
+# Deploy with Railway CLI
+railway deploy
+
+# Run database migrations on Railway
+railway run pnpm db:push
+
+# View Railway logs
+railway logs --tail
+```
+
+<Callout type="warn">
+  **Railway private networking:** When running `railway run pnpm db:push`, use `DATABASE_PUBLIC_URL`
+  instead of the private `DATABASE_URL` to avoid `ENOTFOUND` errors from local machine.
+</Callout>
+
+### Environment Variables
+
+```bash
+# Set production environment variable
+railway variables set OPENROUTER_API_KEY="sk-or-..."
+
+# List all environment variables
+railway variables
+```
+
+## Next Steps
+
+- **[Common Gotchas](/docs/development/gotchas)** — Issues you'll definitely encounter
+- **[Local Setup](/docs/development/local-setup)** — Initial environment configuration
+- **[System Overview](/docs/architecture/overview)** — Understand what you're building

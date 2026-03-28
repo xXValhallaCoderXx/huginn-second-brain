@@ -1,0 +1,86 @@
+---
+title: The Personality System
+description: Understand how SOUL and IDENTITY files shape your Huginn AI's behaviour and communication style.
+---
+
+Every Huginn AI has a personality you define. The system uses two plain-text files — **SOUL** and **IDENTITY** — loaded into the AI's instructions at the start of every conversation.
+
+## Why a two-file system?
+
+The split between SOUL and IDENTITY lets you think clearly about two different things:
+
+- **SOUL** is about _who the AI is_
+- **IDENTITY** is about _who you are to the AI_
+
+Keeping these separate makes both files easier to write and easier to maintain over time.
+
+## The SOUL file
+
+The SOUL file describes the AI's core character. It answers questions like:
+
+- How does this AI communicate? (concise or verbose, formal or casual, supportive or direct)
+- What values should guide its responses?
+- What areas should it be especially knowledgeable or thoughtful about?
+- How should it handle uncertainty or disagreement?
+
+Think of SOUL as the instruction manual for the AI's personality — the things that would be true about how it behaves regardless of who it's talking to.
+
+### Example SOUL content (excerpt)
+
+```
+You are direct and concise. When answering questions, lead with the answer and follow up
+with context only if needed. You don't pad responses with unnecessary affirmations.
+
+You approach problems analytically but aren't afraid to express a point of view. When
+asked for an opinion, give one.
+
+You have a dry sense of humor. Use it sparingly.
+```
+
+## The IDENTITY file
+
+The IDENTITY file describes you — the specific user the AI is talking to. It answers questions like:
+
+- Who are you? What do you do?
+- What are you working on right now?
+- What does the AI need to know about your context, preferences, or situation?
+- How do you prefer to communicate?
+- What matters to you?
+
+Think of IDENTITY as the brief you'd give a personal assistant before their first day working with you. The more context you provide, the more tailored the AI's responses become.
+
+### Example IDENTITY content (excerpt)
+
+```
+I'm a product manager at a SaaS company. I manage a team of 6 and report to the CTO.
+
+My current focus is a pricing redesign project with a deadline in Q2. I'm also onboarding
+a new engineer this month.
+
+I prefer bullet points over paragraphs. Keep responses short unless I ask for detail.
+Don't ask clarifying questions before answering — just take your best shot and I'll redirect
+if needed.
+
+I'm based in London, in the GMT+1 timezone.
+```
+
+## How the files are loaded
+
+At the start of every conversation — whether on the web dashboard, Telegram, or any other channel — Huginn loads the latest version of both files and includes them in the AI's system instructions.
+
+<Callout type="info">
+  Changes to your personality files take effect immediately on your next conversation. There's no
+  need to restart anything.
+</Callout>
+
+## Versioning
+
+Every time you save a personality file, a new version is created. The previous version is preserved — it's never overwritten. Huginn always uses the most recent version of each file.
+
+This append-only approach means you can experiment freely. If you want to revert to something you wrote earlier, the history exists (future tooling will surface this more directly).
+
+## Getting started
+
+If you haven't written your personality files yet, start with IDENTITY. A few sentences about who you are and how you prefer to communicate will already make a meaningful difference in how Huginn responds.
+
+Navigate to **Personality** in the top navigation to open the editor.

@@ -1,8 +1,40 @@
 ---
-title: Internal Documentation
-description: Private internal documentation for the Huginn development team.
+title: Huginn Engineering Docs
+description: Internal engineering documentation for the Huginn development team — architecture, patterns, APIs, and workflows.
 ---
 
-## Welcome
+# Huginn Engineering Documentation
 
-This is the internal documentation site for Huginn. Use this for architecture decisions, runbooks, and team-facing reference material.
+Welcome to the internal engineering docs for **Huginn** — a personal AI assistant built as a Turborepo monorepo with TanStack Start, Mastra agents, and PostgreSQL.
+
+## Quick Start
+
+New to the codebase? Start here:
+
+1. **[Local Setup](/docs/development/local-setup)** — Get Huginn running locally
+2. **[System Overview](/docs/architecture/overview)** — Understand the architecture
+3. **[Common Gotchas](/docs/development/gotchas)** — Known issues and workarounds
+
+## Key Concepts
+
+- **One account → one personality → one memory → any channel** — Core design principle
+- **Portfolio pattern** — Single database with schema isolation (`public`, `mastra`)
+- **RequestContext injection** — Per-request dependency injection for agents
+- **Append-only versioning** — Personality files never update, only insert new versions
+- **Token encryption at rest** — All OAuth tokens encrypted with AES-256-GCM
+
+## Architecture Overview
+
+| Package | Purpose | Port |
+|---------|---------|------|
+| **apps/web** | TanStack Start web dashboard + Better Auth | 3000 |
+| **apps/agent** | Mastra agent service + Telegram bot | 4111 |
+| **apps/public-docs** | Customer-facing Fumadocs site | 5000 |
+| **apps/private-docs** | Internal engineering docs (this site) | 5001 |
+| **packages/shared** | Drizzle schemas, services, TypeScript interfaces | — |
+
+## Need Help?
+
+- **Architecture questions:** Check [Architecture](/docs/architecture/overview) section
+- **API references:** See [Services](/docs/services/account-service) section  
+- **Development issues:** Look in [Development](/docs/development/gotchas) gotchas

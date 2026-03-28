@@ -1,0 +1,334 @@
+---
+title: Local Development Setup
+description: Step-by-step guide to get Huginn running locally with Docker PostgreSQL, environment configuration, and all services.
+---
+
+# Local Development Setup
+
+Get Huginn running locally in under 10 minutes. This guide assumes you have Node.js 18+, Docker, and Git installed.
+
+## Prerequisites
+
+<Callout type="info">
+  Huginn requires **Node.js 18+**, **pnpm**, and **Docker** for the PostgreSQL database with
+  PgVector extension.
+</Callout>
+
+- **Node.js 18+** — Recommended via [nvm](https://github.com/nvm-sh/nvm)
+- **pnpm** — Install with `npm install -g pnpm`
+- **Docker** — For PostgreSQL with PgVector (required for semantic recall)
+
+## Quick Start
+
+<Steps>
+<Step>
+### Clone and Install
+
+```bash
+git clone https://github.com/your-org/huginn-second-brain.git
+cd huginn-second-brain
+
+# Install all workspace dependencies
+pnpm install
+```
+
+</Step>
+<Step>
+### Start PostgreSQL
+
+```bash
+# Start PostgreSQL with PgVector extension
+docker compose up -d
+
+# Verify database is running
+docker compose ps
+```
+
+**Database Details:**
+
+- **Host:** `localhost:5432`
+- **Database:** `huginn`
+- **User/Password:** `postgres`/`postgres`
+- **Image:** `pgvector/pgvector:pg16` (includes vector extension)
+
+</Step>
+<Step>
+### Environment Configuration
+
+Copy the example environment file and configure:
+
+```bash
+cp .env.example .env
+```
+
+**Required Environment Variables:**
+
+```bash
+# Database (pre-configured for local Docker)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/huginn"
+
+# OpenRouter for agent LLM access
+OPENROUTER_API_KEY="sk-or-..."  # Get from https://openrouter.ai
+
+# Google OAuth (for auth + calendar)
+GOOGLE_CLIENT_ID="..."  # Google Cloud Console
+GOOGLE_CLIENT_SECRET="..."
+
+# Better Auth session signing
+BETTER_AUTH_SECRET="..."  # Generate: openssl rand -base64 32
+
+# Agent service URL (for web → agent communication)
+AGENT_URL="http://localhost:4111"
+
+# Calendar encryption key (32 bytes hex)
+CALENDAR_ENCRYPTION_KEY="..."  # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Optional: Telegram bot token (for Telegram integration)
+TELEGRAM_BOT_TOKEN="..."  # @BotFather on Telegram
+```
+
+</Step>
+<Step>
+### Google OAuth Setup
+
+For authentication and calendar integration:
+
+1. **Go to:** [Google Cloud Console](https://console.cloud.google.com)
+2. **Create project** or select existing
+3. **Enable APIs:** Google+ API, Google Calendar API
+4. **Create OAuth 2.0 credentials:**
+   - Application type: Web application
+   - Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google`
+5. **Copy Client ID and Secret** to your `.env` file
+
+</Step>
+<Step>
+### Database Migration
+
+Push the Drizzle schema to PostgreSQL:
+
+```bash
+pnpm db:push
+```
+
+This creates all application tables in the `public` schema. Mastra and PgVector tables are auto-created on first use.
+
+</Step>
+<Step>
+### Start All Services
+
+```bash
+# Start all services (web, agent, docs) simultaneously
+pnpm dev
+
+# Or start individual services:
+pnpm --filter @huginn/web dev             # Web dashboard (port 3000)
+pnpm --filter @huginn/agent dev           # Agent service (port 4111)
+pnpm dev:public-docs                      # Public docs (port 5000)
+pnpm dev:private-docs                     # Private docs (port 5001)
+```
+
+**Service URLs:**
+
+- **Web Dashboard:** http://localhost:3000
+- **Agent API:** http://localhost:4111
+- **Public Docs:** http://localhost:5000
+- **Private Docs:** http://localhost:5001
+
+</Step>
+</Steps>
+
+## Verification Steps
+
+### 1. Web Authentication
+
+1. Open http://localhost:3000
+2. Click "Sign in with Google"
+3. Complete OAuth flow
+4. Verify you see the dashboard with default personality files
+
+### 2. Agent Service
+
+```bash
+# Test agent health endpoint
+curl http://localhost:4111/health
+# Should return: {"status": "ok"}
+
+# Test chat endpoint (requires authentication)
+curl -X POST http://localhost:4111/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello", "accountId": "test", "threadId": "test"}'
+```
+
+### 3. Database Tables
+
+```bash
+# Open Drizzle Studio to inspect tables
+pnpm db:studio
+# Opens on http://localhost:4983
+```
+
+**Expected Tables:**
+
+- `accounts`, `personality_files`, `channel_links`, `linking_codes`, `calendar_connections`
+- Better Auth tables: `user`, `session`, `account`, `verification`
+- Mastra tables (in `mastra` schema): Created on first agent use
+- PgVector tables: Created on first semantic recall
+
+### 4. Mastra Studio (Optional)
+
+```bash
+# Start agent service first
+pnpm --filter @huginn/agent dev
+
+# In another terminal, start Mastra Studio
+pnpm --filter @huginn/agent dev:studio
+# Opens on http://localhost:3001
+```
+
+**Studio Features:**
+
+- Agent configuration inspector
+- Memory browser (conversations, working memory)
+- Tools testing interface
+- Workflow execution history
+
+## Development Workflow
+
+### File Watching & Hot Reload
+
+- **Web app:** TanStack Start supports full hot reload for frontend + server functions
+- **Agent service:** `tsx watch` restarts on file changes
+- **Docs sites:** Next.js hot reload for MDX content changes
+
+### Database Development
+
+```bash
+# Generate migration after schema changes
+pnpm db:generate
+
+# Push schema changes to local database
+pnpm db:push
+
+# Open database GUI
+pnpm db:studio
+```
+
+### Adding New Environment Variables
+
+1. Add to `.env` file
+2. Add to `.env.example` with placeholder
+3. Update this documentation
+4. For server-side vars (Nitro), import via `dotenv` in the module:
+
+```typescript
+// Example: apps/web/src/lib/some-service.ts
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(import.meta.dirname, "../../../../.env") });
+
+const apiKey = process.env.NEW_API_KEY!;
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<Callout type="warn">
+  **Route Generator Overwrites:** TanStack Start's route generator will overwrite new route files
+  while the dev server is running. Create full page components in `apps/web/src/components/` and
+  keep route files minimal.
+</Callout>
+
+**PostgreSQL Connection Failed:**
+
+```bash
+# Check if Docker container is running
+docker compose ps
+
+# View PostgreSQL logs
+docker compose logs postgres
+
+# Restart database
+docker compose down && docker compose up -d
+```
+
+**PgVector Extension Missing:**
+
+```bash
+# Error: extension "vector" does not exist
+# Ensure you're using the correct Docker image:
+
+# In docker-compose.yml:
+services:
+  postgres:
+    image: pgvector/pgvector:pg16  # NOT postgres:16-alpine
+```
+
+**zod Version Conflicts in Agent:**
+
+```bash
+# Error: _parse is not a function
+# Ensure zod@4 is pinned in apps/agent/package.json:
+
+{
+  "dependencies": {
+    "zod": "^4.3.6"  # NOT 3.25.x
+  }
+}
+```
+
+**Better Auth Schema Error:**
+
+```typescript
+// Error: Cannot find auth tables
+// Ensure schema is passed to drizzleAdapter:
+
+drizzleAdapter(db, {
+  provider: "pg",
+  schema: { user, session, account: authAccount, verification }, // Required!
+});
+```
+
+**Drizzle ORM Conflicts:**
+
+```bash
+# Error: Duplicate instance type conflicts
+# Keep ALL drizzle-orm queries in packages/shared/src/services/
+# Never import drizzle operators (eq, and, etc.) in apps/
+```
+
+### Development Database Reset
+
+```bash
+# Nuclear option: Reset everything
+docker compose down -v  # Removes volumes
+docker compose up -d
+pnpm db:push
+```
+
+**Warning:** This deletes all local data including test accounts and conversations.
+
+### Environment Debugging
+
+```bash
+# Check environment loading
+node -e "require('dotenv').config(); console.log(process.env.DATABASE_URL)"
+
+# Verify database connection
+node -e "
+const { drizzle } = require('drizzle-orm/postgres-js');
+const postgres = require('postgres');
+require('dotenv').config();
+const sql = postgres(process.env.DATABASE_URL);
+const db = drizzle(sql);
+console.log('Database connected:', !!db);
+"
+```
+
+## Next Steps
+
+- **[Commands Reference](/docs/development/commands)** — All available pnpm scripts
+- **[Common Gotchas](/docs/development/gotchas)** — Known issues and workarounds
+- **[System Overview](/docs/architecture/overview)** — Understand the architecture

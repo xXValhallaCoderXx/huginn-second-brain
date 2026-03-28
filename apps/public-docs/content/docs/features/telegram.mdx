@@ -1,0 +1,76 @@
+---
+title: Telegram Integration
+description: Link your Telegram account to chat with Huginn from your phone or desktop Telegram app.
+---
+
+Connecting Telegram gives you a native mobile interface for Huginn. Once linked, you can chat with the same AI — with the same memory and personality — directly through the Telegram app.
+
+## Linking your Telegram account
+
+<Steps>
+<Step>
+### Go to Connected Channels
+
+In the top navigation, click **Channels**. You'll see the **Telegram** card showing "Not connected."
+
+</Step>
+<Step>
+### Start the linking flow
+
+Click **Connect Telegram** on the Telegram card. This takes you to the **Link Telegram** page, which automatically generates a one-time linking code and shows a 3-step progress tracker.
+
+</Step>
+<Step>
+### Open the link or scan the QR code
+
+On Step 1, you'll see:
+
+- A **deep link button** — tap it to open Telegram directly and be taken to the Huginn bot. This is the easiest option on mobile.
+- A **QR code** — scan it with your phone's camera or the Telegram app if you're on a desktop browser.
+- A **manual code** — if neither option works, copy the `LINK-XXXX` code and send it to the Huginn bot manually with `/link LINK-XXXX`.
+
+</Step>
+<Step>
+### Open Telegram
+
+Tapping the deep link or scanning the QR code opens Telegram and takes you to the Huginn bot with a `/start LINK-XXXX` command pre-filled. Press **Send** to confirm.
+
+</Step>
+<Step>
+### Linking completes automatically
+
+The dashboard polls in the background. Once the bot receives your `/start` command, linking completes and the page advances to Step 3 — **Linked!** — automatically. You don't need to do anything else.
+
+</Step>
+</Steps>
+
+<Callout type="info">
+  The linking code expires after 10 minutes. If you see an error, go back to the Channels page and
+  start the flow again to generate a fresh code.
+</Callout>
+
+## Chatting via Telegram
+
+Once linked, open the Huginn bot in Telegram and send any message. The bot uses the same AI model, the same personality files, and the same memory as the web dashboard.
+
+Each Telegram chat is its own conversation thread — Huginn tracks context within that chat, and its memory carries insights across all your threads.
+
+## Bot commands
+
+| Command      | What it does                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `/start`     | Welcome message with instructions. Also used for linking via deep link.                    |
+| `/link CODE` | Manual linking fallback — use this if the QR/deep link didn't work.                        |
+| `/brief`     | Request an on-demand daily briefing (see [Daily Briefing](/docs/features/daily-briefing)). |
+
+Regular text messages are routed to the AI for a normal conversation reply.
+
+## Unlinking Telegram
+
+To disconnect your Telegram account:
+
+1. Go to **Channels** in the navigation.
+2. Find the Telegram card — it will show your linked Telegram User ID.
+3. Click **Unlink** and confirm.
+
+After unlinking, the Huginn bot in Telegram will no longer recognise your account until you go through the linking flow again.
