@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { createPersonalityStore, createAccountService, createCalendarConnectionService } from "@huginn/shared";
+import { createPersonalityStore, createAccountService, createCalendarConnectionService, createCalendarService } from "@huginn/shared";
 import { auth } from "./auth";
 import { db } from "./db";
 import { resolveAccount } from "./account-resolution";
@@ -240,4 +240,27 @@ export const deleteCalendarConnection = createServerFn({ method: "POST" })
         if (!conn) throw new Error("Connection not found");
         await svc.deleteConnection(data.connectionId);
         return { success: true };
+    });
+
+/**
+ * Server function: fetch today's calendar events for the authenticated account.
+ */
+export const getTodayCalendarEvents = createServerFn({ method: "GET" })
+    .handler(async () => {
+        const account = await resolveAuthenticatedAccount();
+        const svc = createCalendarService(db);
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const events = await svc.getEvents(account.id, { start: startOfDay, end: endOfDay });
+        return events.map((e) => ({
+            id: e.id,
+            title: e.title,
+            description: e.description,
+            start: e.start.toISOString(),
+            end: e.end.toISOString(),
+            location: e.location,
+            isAllDay: e.isAllDay,
+            source: e.source,
+        }));
     });

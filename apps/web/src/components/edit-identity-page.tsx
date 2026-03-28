@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { savePersonalityFile } from "../lib/server-fns";
 
 type FileType = "IDENTITY" | "SOUL";
@@ -9,10 +9,6 @@ interface LoadedPersonality {
     identity: string | null;
 }
 
-function getFile(personality: LoadedPersonality, tab: FileType): string | null {
-    return tab === "SOUL" ? personality.soul : personality.identity;
-}
-
 export function EditIdentityPage({
     personality,
     accountId,
@@ -20,38 +16,77 @@ export function EditIdentityPage({
     personality: LoadedPersonality;
     accountId: string;
 }) {
-    const router = useRouter();
-    const [activeTab, setActiveTab] = React.useState<FileType>("IDENTITY");
-    const [content, setContent] = React.useState(
-        getFile(personality, "IDENTITY") ?? ""
+    return (
+        <div>
+            <p className="mb-6 text-sm text-text-muted">
+                Define how Huginn thinks, speaks, and behaves through structured
+                identity files.
+            </p>
+
+            <PersonalityEditorCard
+                title="SOUL.md"
+                description="Core personality traits, values, and behavioral patterns"
+                fileType="SOUL"
+                initialContent={personality.soul ?? ""}
+                accountId={accountId}
+                placeholder={"# Core Identity\n\nI am a thoughtful, empathetic AI assistant..."}
+                minHeight="min-h-[240px]"
+            />
+
+            <PersonalityEditorCard
+                title="IDENTITY.md"
+                description="Contextual information, background, and domain expertise"
+                fileType="IDENTITY"
+                initialContent={personality.identity ?? ""}
+                accountId={accountId}
+                placeholder={"# Background\n\nI have expertise in..."}
+                minHeight="min-h-[200px]"
+            />
+        </div>
     );
+}
+
+function PersonalityEditorCard({
+    title,
+    description,
+    fileType,
+    initialContent,
+    accountId,
+    placeholder,
+    minHeight,
+}: {
+    title: string;
+    description: string;
+    fileType: FileType;
+    initialContent: string;
+    accountId: string;
+    placeholder: string;
+    minHeight: string;
+}) {
+    const router = useRouter();
+    const [content, setContent] = React.useState(initialContent);
     const [reason, setReason] = React.useState("");
     const [saving, setSaving] = React.useState(false);
-    const [dirty, setDirty] = React.useState(false);
 
-    const currentFile = getFile(personality, activeTab);
+    const dirty = content !== initialContent;
 
-    const switchTab = (tab: FileType) => {
-        if (dirty && !confirm("Discard unsaved changes?")) return;
-        setActiveTab(tab);
-        setContent(getFile(personality, tab) ?? "");
+    const handleCancel = () => {
+        setContent(initialContent);
         setReason("");
-        setDirty(false);
     };
 
     const handleSave = async () => {
-        if (!content.trim() || saving) return;
+        if (!content.trim() || saving || !dirty) return;
         setSaving(true);
         try {
             await savePersonalityFile({
                 data: {
                     accountId,
-                    fileType: activeTab,
+                    fileType,
                     content: content.trim(),
-                    reason: reason.trim() || `Updated ${activeTab}`,
+                    reason: reason.trim() || `Updated ${fileType}`,
                 },
             });
-            setDirty(false);
             setReason("");
             router.invalidate();
         } finally {
@@ -59,100 +94,73 @@ export function EditIdentityPage({
         }
     };
 
+    const lineCount = content.split("\n").length;
+
     return (
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6 rounded-2xl border border-border bg-surface p-6">
             {/* Header */}
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                    <Link
-                        to="/dashboard"
-                        className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-white/5 hover:text-text-body"
-                    >
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-                        </svg>
-                    </Link>
-                    <div>
-                        <h1 className="text-xl font-semibold text-text-heading">
-                            Edit Personality
-                        </h1>
-                        <p className="text-sm text-text-muted">
-                            Modify your AI&apos;s SOUL and IDENTITY files
-                        </p>
+            <div className="mb-4">
+                <h3 className="text-base font-semibold text-text-heading">
+                    {title}
+                </h3>
+                <p className="mt-1 text-xs text-text-muted">{description}</p>
+            </div>
+
+            {/* Editor with line numbers */}
+            <div className="overflow-hidden rounded-xl border border-border bg-page">
+                <div className="flex">
+                    {/* Line numbers */}
+                    <div className="w-12 shrink-0 select-none border-r border-border bg-surface py-3 px-2 text-right font-mono text-xs leading-[1.5rem] text-text-subtle">
+                        {Array.from({ length: Math.max(lineCount, 1) }, (_, i) => (
+                            <div key={i}>{i + 1}</div>
+                        ))}
                     </div>
-                </div>
-                <div className="flex gap-2">
-                    <Link
-                        to="/dashboard"
-                        className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-body transition-colors hover:bg-white/5"
-                    >
-                        Discard
-                    </Link>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving || !dirty}
-                        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-light disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        {saving ? "Saving…" : "Save Changes"}
-                    </button>
-                </div>
-            </div>
-
-            {/* Tab switcher */}
-            <div className="mb-6 inline-flex rounded-lg border border-border bg-surface p-1">
-                {(["IDENTITY", "SOUL"] as const).map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => switchTab(tab)}
-                        className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === tab
-                                ? "bg-accent text-white"
-                                : "text-text-muted hover:text-text-body"
-                            }`}
-                    >
-                        {tab}
-                    </button>
-                ))}
-            </div>
-
-            {/* Two-column editor */}
-            <div className="grid gap-6 lg:grid-cols-2">
-                {/* Current (read-only) */}
-                <div className="rounded-2xl border border-border bg-surface p-5">
-                    <h3 className="mb-3 text-sm font-semibold text-text-heading">
-                        Current {activeTab}
-                    </h3>
-                    <pre className="max-h-[60vh] overflow-auto rounded-lg bg-page p-4 text-sm leading-relaxed text-text-body font-mono whitespace-pre-wrap">
-                        {currentFile ?? "No content yet"}
-                    </pre>
-                </div>
-
-                {/* Editor */}
-                <div className="rounded-2xl border border-border bg-surface p-5">
-                    <h3 className="mb-3 text-sm font-semibold text-text-heading">
-                        Edit {activeTab}
-                    </h3>
+                    {/* Textarea */}
                     <textarea
                         value={content}
-                        onChange={(e) => {
-                            setContent(e.target.value);
-                            setDirty(true);
-                        }}
-                        className="h-[50vh] w-full resize-none rounded-lg border border-border bg-page p-4 text-sm leading-relaxed text-text-heading font-mono placeholder:text-text-subtle outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
-                        placeholder={`Enter ${activeTab} content…`}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder={placeholder}
+                        className={`flex-1 resize-none bg-transparent p-3 font-mono text-sm leading-[1.5rem] text-text-heading placeholder:text-text-subtle outline-none ${minHeight}`}
                     />
-                    <div className="mt-3">
-                        <label className="mb-1 block text-xs font-medium text-text-muted">
-                            Change reason (optional)
-                        </label>
-                        <input
-                            type="text"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            placeholder="Describe what changed…"
-                            className="w-full rounded-lg border border-border bg-page px-3 py-2 text-sm text-text-heading placeholder:text-text-subtle outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
-                        />
-                    </div>
                 </div>
+            </div>
+
+            {/* Reason input — shown when dirty */}
+            {dirty && (
+                <div className="mt-4">
+                    <label className="mb-2 block text-xs font-medium text-text-muted">
+                        What did you change?
+                    </label>
+                    <input
+                        type="text"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder={`e.g., Updated ${title.replace(".md", "").toLowerCase()} configuration`}
+                        className="w-full rounded-lg border border-border bg-page px-3 py-2 text-sm text-text-heading placeholder:text-text-subtle outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
+                    />
+                </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="mt-4 flex justify-end gap-2">
+                {dirty && (
+                    <button
+                        onClick={handleCancel}
+                        className="rounded-xl px-5 py-2.5 text-sm font-medium text-text-body bg-white/5 transition-colors hover:bg-white/10"
+                    >
+                        Cancel
+                    </button>
+                )}
+                <button
+                    onClick={handleSave}
+                    disabled={!dirty || saving}
+                    className={`rounded-xl px-5 py-2.5 text-sm font-medium transition-colors ${dirty
+                            ? "bg-accent text-white hover:bg-accent-light shadow-md shadow-accent/20"
+                            : "cursor-not-allowed bg-white/5 text-text-subtle"
+                        }`}
+                >
+                    {saving ? "Saving…" : "Save Changes"}
+                </button>
             </div>
         </div>
     );

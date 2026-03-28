@@ -47,10 +47,11 @@ function LinkTelegram() {
             {/* Header */}
             <div className="mb-6">
                 <Link
-                    to="/channels"
+                    to="/settings"
+                    search={{ tab: "channels" }}
                     className="mb-2 inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-body transition-colors"
                 >
-                    ← Back to Connected Channels
+                    ← Back to Channels
                 </Link>
                 <div className="flex items-center gap-3">
                     <h1 className="text-xl font-semibold text-text-heading">
@@ -329,10 +330,11 @@ function StepThree() {
                     Go to Chat →
                 </Link>
                 <Link
-                    to="/channels"
+                    to="/settings"
+                    search={{ tab: "channels" }}
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-6 py-3 text-sm font-medium text-text-body transition-colors hover:bg-white/5"
                 >
-                    Back to Connected Channels
+                    Back to Channels
                 </Link>
             </div>
         </div>

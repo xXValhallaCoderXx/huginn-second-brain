@@ -29,21 +29,10 @@ export function CalendarsPage({
     };
 
     return (
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-            {/* Header */}
-            <div className="mb-8 flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10">
-                    <svg className="h-6 w-6 text-accent-light" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-                    </svg>
-                </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-text-heading">Connected Calendars</h1>
-                    <p className="text-sm text-text-muted">
-                        Connect your calendars so Huginn knows your schedule
-                    </p>
-                </div>
-            </div>
+        <div>
+            <p className="mb-6 text-sm text-text-muted">
+                Connect calendar providers to enable scheduling features.
+            </p>
 
             {/* Success toast */}
             {connected && (

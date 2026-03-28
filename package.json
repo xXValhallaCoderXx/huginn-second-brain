@@ -6,6 +6,8 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "dev:web": "pnpm --filter @huginn/web dev",
+    "dev:agent": "pnpm --filter @huginn/agent dev",
     "build": "turbo run build",
     "build:web": "pnpm --filter @huginn/web build",
     "build:agent": "pnpm --filter @huginn/agent build",

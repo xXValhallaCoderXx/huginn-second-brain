@@ -5,21 +5,10 @@ import type { ChannelLink } from "@huginn/shared";
 
 export function ConnectedChannels({ channels }: { channels: ChannelLink[] }) {
     return (
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            {/* Header */}
-            <div className="mb-6">
-                <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10">
-                        <svg className="h-5 w-5 text-accent-light" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-1.875a4.5 4.5 0 0 0-1.242-7.244l-4.5-4.5a4.5 4.5 0 0 0-6.364 6.364L5.25 9.69" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-semibold text-text-heading">Connected Channels</h1>
-                        <p className="text-sm text-text-muted">Manage your communication channels</p>
-                    </div>
-                </div>
-            </div>
+        <div>
+            <p className="mb-6 text-sm text-text-muted">
+                Manage messaging platforms where Huginn can interact with you.
+            </p>
 
             {/* Channel cards grid */}
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

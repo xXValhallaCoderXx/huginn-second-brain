@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <script>
+        window.FontAwesomeConfig = {
+          autoReplaceSvg: 'nest'
+        };
+      </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        raven: {
+                            50: '#f6f7f9',
+                            100: '#eceef2',
+                            200: '#d5dae3',
+                            300: '#b1bbcc',
+                            400: '#8797af',
+                            500: '#667896',
+                            600: '#505f7c',
+                            700: '#404d65',
+                            800: '#364055',
+                            900: '#0f1218',
+                            950: '#080a0d',
+                        },
+                        iris: '#5e61ff',
+                        jade: '#10b981',
+                        mist: '#9ca3af',
+                        frost: '#e5e7eb',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #364055; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #1f2937; }
+        
+        .bg-raven-pattern {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 32px 32px;
+        }
+        .dark .bg-raven-pattern {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.02) 1px, transparent 0);
+        }
+
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #5e61ff;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #5e61ff;
+        }
+
+        .timeline-connector {
+            position: absolute;
+            left: 1rem;
+            top: 2.5rem;
+            bottom: -1rem;
+            width: 2px;
+            background: linear-gradient(to bottom, #5e61ff 0%, rgba(94, 97, 255, 0.3) 100%);
+        }
+
+        .timeline-dot {
+            position: relative;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-raven-50 text-raven-900 dark:bg-raven-950 dark:text-raven-50 w-full min-h-screen transition-colors duration-300 flex flex-col m-0 p-0 overflow-x-hidden">
+
+    <!-- Navigation Bar -->
+    <nav id="main-nav" class="fixed top-0 w-full z-50 bg-white/80 dark:bg-raven-900/80 backdrop-blur-md border-b border-raven-200 dark:border-raven-800 transition-colors duration-300">
+        <div class="max-w-[1440px] mx-auto px-6 lg:px-12">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="#" class="flex items-center gap-3 group">
+                        <div class="w-8 h-8 rounded-lg bg-iris flex items-center justify-center text-white shadow-lg shadow-iris/20 group-hover:bg-iris/90 transition-colors">
+                            <i class="fa-solid fa-feather-pointed text-sm"></i>
+                        </div>
+                        <span class="font-bold text-xl tracking-tight">Huginn</span>
+                    </a>
+                </div>
+
+                <div class="hidden md:flex items-center space-x-6">
+                    <button id="theme-toggle" class="p-2 text-raven-500 hover:text-iris dark:text-raven-400 dark:hover:text-iris transition-colors rounded-full hover:bg-raven-100 dark:hover:bg-raven-800">
+                        <i class="fa-solid fa-moon dark:hidden"></i>
+                        <i class="fa-solid fa-sun hidden dark:block"></i>
+                    </button>
+                    <a href="#" class="text-sm font-medium text-iris border-b-2 border-iris pb-1">Dashboard</a>
+                    <a href="#" class="text-sm font-medium text-raven-600 hover:text-raven-900 dark:text-raven-300 dark:hover:text-white transition-colors">Chat</a>
+                    <a href="#" class="text-sm font-medium text-raven-600 hover:text-raven-900 dark:text-raven-300 dark:hover:text-white transition-colors">Connected Channels</a>
+                    <a href="#" class="text-sm font-medium text-raven-600 hover:text-raven-900 dark:text-raven-300 dark:hover:text-white transition-colors">Settings</a>
+                </div>
+
+                <div class="flex items-center md:hidden">
+                    <button id="mobile-menu-btn" class="p-2 text-raven-600 dark:text-raven-300 hover:bg-raven-100 dark:hover:bg-raven-800 rounded-lg">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="dashboard-main" class="flex-grow w-full pt-20 pb-12 px-6 lg:px-12 max-w-[1440px] mx-auto">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+            
+            <!-- Left Column: Identity & Quick Actions -->
+            <aside id="left-column" class="lg:col-span-4 space-y-6">
+                
+                <!-- Greeting Card -->
+                <div id="greeting-card" class="bg-gradient-to-br from-iris/10 via-iris/5 to-transparent dark:from-iris/20 dark:via-iris/10 dark:to-transparent rounded-2xl border border-iris/20 dark:border-iris/30 p-6 shadow-sm">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <p class="text-sm text-mist">Good afternoon</p>
+                            <h2 class="text-2xl font-semibold text-raven-900 dark:text-white mt-1">Sarah</h2>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-iris to-iris/80 flex items-center justify-center text-white shadow-lg shadow-iris/30">
+                            <i class="fa-solid fa-user text-lg"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="relative flex h-2.5 w-2.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-jade opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-jade"></span>
+                        </span>
+                        <span class="text-raven-700 dark:text-raven-300">Huginn is online</span>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div id="quick-actions-card" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-raven-200 dark:border-raven-800">
+                        <h3 class="text-base font-semibold text-raven-900 dark:text-white">Quick Actions</h3>
+                    </div>
+                    <div class="p-5 space-y-3">
+                        <button class="w-full bg-iris hover:bg-iris/90 text-white font-medium py-3.5 px-4 rounded-xl transition-all shadow-sm shadow-iris/20 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-message"></i>
+                            Chat with Huginn
+                        </button>
+                        <button class="w-full bg-raven-100 dark:bg-raven-800 hover:bg-raven-200 dark:hover:bg-raven-700 text-raven-900 dark:text-white font-medium py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-pen"></i>
+                            Edit Personality
+                        </button>
+                        <button class="w-full bg-raven-100 dark:bg-raven-800 hover:bg-raven-200 dark:hover:bg-raven-700 text-raven-900 dark:text-white font-medium py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plug"></i>
+                            Manage Channels
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Personality Snapshot -->
+                <div id="personality-snapshot" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-raven-200 dark:border-raven-800">
+                        <h3 class="text-base font-semibold text-raven-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-brain text-iris"></i>
+                            Personality Snapshot
+                        </h3>
+                    </div>
+                    <div class="p-5">
+                        <div class="bg-raven-50 dark:bg-raven-950 rounded-xl p-4 border border-raven-200 dark:border-raven-800">
+                            <p class="text-sm text-raven-700 dark:text-raven-300 leading-relaxed">
+                                I understand you as a <span class="font-semibold text-iris">privacy-conscious developer</span> who values concise, actionable information. You prefer direct communication without excessive pleasantries.
+                            </p>
+                        </div>
+                        <button class="mt-4 text-sm text-iris hover:text-iris/80 font-medium flex items-center gap-1">
+                            View full personality file
+                            <i class="fa-solid fa-arrow-right text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Account Info (Collapsible) -->
+                <div id="account-info-card" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-4 flex justify-between items-center cursor-pointer hover:bg-raven-50 dark:hover:bg-raven-800/50 transition-colors" id="account-info-toggle">
+                        <h3 class="text-sm font-semibold text-raven-900 dark:text-white">Account Details</h3>
+                        <i class="fa-solid fa-chevron-down text-raven-400 transition-transform duration-200" id="account-info-icon"></i>
+                    </div>
+                    <div class="px-4 pb-4 space-y-3 hidden" id="account-info-content">
+                        <div>
+                            <p class="text-xs text-mist mb-1.5">Instance ID</p>
+                            <div class="flex items-center justify-between bg-raven-50 dark:bg-raven-950 p-2.5 rounded-lg border border-raven-200 dark:border-raven-800">
+                                <span class="font-mono text-xs text-raven-700 dark:text-raven-300">hgn_8f92a1b3c4d5</span>
+                                <button class="text-raven-400 hover:text-iris transition-colors ml-2" title="Copy ID">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-xs text-mist mb-1.5">Last Sync</p>
+                            <p class="text-sm text-raven-700 dark:text-raven-300">2 minutes ago</p>
+                        </div>
+                    </div>
+                </div>
+
+            </aside>
+
+            <!-- Right Column: Dynamic Content -->
+            <div id="right-column" class="lg:col-span-8 space-y-6">
+                
+                <!-- Today's Agenda -->
+                <section id="todays-agenda" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-6 border-b border-raven-200 dark:border-raven-800">
+                        <h2 class="text-lg font-semibold text-raven-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-day text-iris"></i>
+                            Today's Agenda
+                        </h2>
+                        <p class="text-sm text-mist mt-1">Friday, March 28</p>
+                    </div>
+                    <div class="p-6">
+                        <!-- Timeline -->
+                        <div class="space-y-6">
+                            <!-- Current Time Marker -->
+                            <div class="flex items-center gap-3">
+                                <div class="timeline-dot w-8 h-8 rounded-full bg-iris flex items-center justify-center text-white text-xs font-semibold shadow-lg shadow-iris/30">
+                                    <i class="fa-solid fa-circle text-[6px]"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-semibold text-iris">Now • 2:30 PM</p>
+                                </div>
+                            </div>
+
+                            <!-- Event 1 -->
+                            <div class="flex items-start gap-3 relative">
+                                <div class="timeline-connector"></div>
+                                <div class="timeline-dot w-8 h-8 rounded-full bg-raven-200 dark:bg-raven-800 flex items-center justify-center text-raven-600 dark:text-raven-400">
+                                    <i class="fa-solid fa-circle text-[6px]"></i>
+                                </div>
+                                <div class="flex-1 pb-6">
+                                    <p class="text-xs text-mist mb-1">3:00 PM - 4:00 PM</p>
+                                    <h4 class="text-base font-semibold text-raven-900 dark:text-frost">Team Sync Meeting</h4>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 mt-1">Weekly engineering standup</p>
+                                </div>
+                            </div>
+
+                            <!-- Event 2 -->
+                            <div class="flex items-start gap-3 relative">
+                                <div class="timeline-connector"></div>
+                                <div class="timeline-dot w-8 h-8 rounded-full bg-raven-200 dark:bg-raven-800 flex items-center justify-center text-raven-600 dark:text-raven-400">
+                                    <i class="fa-solid fa-circle text-[6px]"></i>
+                                </div>
+                                <div class="flex-1 pb-6">
+                                    <p class="text-xs text-mist mb-1">5:30 PM - 6:30 PM</p>
+                                    <h4 class="text-base font-semibold text-raven-900 dark:text-frost">Product Review</h4>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 mt-1">Q1 roadmap discussion</p>
+                                </div>
+                            </div>
+
+                            <!-- Event 3 -->
+                            <div class="flex items-start gap-3 relative">
+                                <div class="timeline-dot w-8 h-8 rounded-full bg-raven-200 dark:bg-raven-800 flex items-center justify-center text-raven-600 dark:text-raven-400">
+                                    <i class="fa-solid fa-circle text-[6px]"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-xs text-mist mb-1">7:00 PM</p>
+                                    <h4 class="text-base font-semibold text-raven-900 dark:text-frost">Dinner Reservation</h4>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 mt-1">Osteria Francescana</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recent Conversations -->
+                <section id="recent-conversations" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-6 border-b border-raven-200 dark:border-raven-800 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-lg font-semibold text-raven-900 dark:text-white flex items-center gap-2">
+                                <i class="fa-solid fa-comments text-iris"></i>
+                                Recent Conversations
+                            </h2>
+                        </div>
+                        <button class="text-sm text-iris hover:text-iris/80 font-medium">View all</button>
+                    </div>
+                    <div class="divide-y divide-raven-200 dark:divide-raven-800">
+                        <!-- Conversation 1 -->
+                        <div class="p-5 hover:bg-raven-50 dark:hover:bg-raven-800/50 transition-colors cursor-pointer">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-full bg-[#0088cc]/10 flex items-center justify-center text-[#0088cc] flex-shrink-0">
+                                    <i class="fa-brands fa-telegram"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2 mb-1">
+                                        <h4 class="font-semibold text-raven-900 dark:text-white text-sm">Telegram</h4>
+                                        <span class="text-xs text-mist whitespace-nowrap">12m ago</span>
+                                    </div>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 line-clamp-2">Can you summarize the key points from today's standup meeting?</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Conversation 2 -->
+                        <div class="p-5 hover:bg-raven-50 dark:hover:bg-raven-800/50 transition-colors cursor-pointer">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-full bg-iris/10 flex items-center justify-center text-iris flex-shrink-0">
+                                    <i class="fa-solid fa-window-maximize"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2 mb-1">
+                                        <h4 class="font-semibold text-raven-900 dark:text-white text-sm">Web Chat</h4>
+                                        <span class="text-xs text-mist whitespace-nowrap">1h ago</span>
+                                    </div>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 line-clamp-2">Help me draft an email response to the client about project timeline.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Conversation 3 -->
+                        <div class="p-5 hover:bg-raven-50 dark:hover:bg-raven-800/50 transition-colors cursor-pointer">
+                            <div class="flex items-start gap-4">
+                                <div class="w-10 h-10 rounded-full bg-[#0088cc]/10 flex items-center justify-center text-[#0088cc] flex-shrink-0">
+                                    <i class="fa-brands fa-telegram"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2 mb-1">
+                                        <h4 class="font-semibold text-raven-900 dark:text-white text-sm">Telegram</h4>
+                                        <span class="text-xs text-mist whitespace-nowrap">3h ago</span>
+                                    </div>
+                                    <p class="text-sm text-raven-600 dark:text-raven-400 line-clamp-2">What's the weather forecast for this weekend?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- This Week's Learning -->
+                <section id="weekly-learning" class="bg-white dark:bg-raven-900 rounded-2xl border border-raven-200 dark:border-raven-800 shadow-sm overflow-hidden">
+                    <div class="p-6 border-b border-raven-200 dark:border-raven-800">
+                        <h2 class="text-lg font-semibold text-raven-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-lightbulb text-iris"></i>
+                            This Week's Learning
+                        </h2>
+                        <p class="text-sm text-mist mt-1">What Huginn learned about you</p>
+                    </div>
+                    <div class="p-6">
+                        <ul class="space-y-4">
+                            <li class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-jade/10 flex items-center justify-center text-jade flex-shrink-0 mt-0.5">
+                                    <i class="fa-solid fa-check text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-raven-700 dark:text-raven-300">You prefer morning meetings between 9-11 AM</p>
+                                    <p class="text-xs text-mist mt-1">Based on 8 scheduling requests</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-jade/10 flex items-center justify-center text-jade flex-shrink-0 mt-0.5">
+                                    <i class="fa-solid fa-check text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-raven-700 dark:text-raven-300">You often ask for code examples in Python and TypeScript</p>
+                                    <p class="text-xs text-mist mt-1">Based on 12 technical queries</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-jade/10 flex items-center justify-center text-jade flex-shrink-0 mt-0.5">
+                                    <i class="fa-solid fa-check text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-raven-700 dark:text-raven-300">You appreciate concise summaries over detailed explanations</p>
+                                    <p class="text-xs text-mist mt-1">Based on conversation patterns</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Theme Toggle
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        
+        themeToggleBtn.addEventListener('click', () => {
+            html.classList.toggle('dark');
+            localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+        });
+
+        // Account Info Collapsible
+        const accountToggle = document.getElementById('account-info-toggle');
+        const accountContent = document.getElementById('account-info-content');
+        const accountIcon = document.getElementById('account-info-icon');
+
+        accountToggle.addEventListener('click', () => {
+            accountContent.classList.toggle('hidden');
+            accountIcon.classList.toggle('rotate-180');
+        });
+
+        // Initialize from localStorage
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            html.classList.add('dark');
+        } else {
+            html.classList.remove('dark');
+        }
+    </script>
+</body>
+</html>
