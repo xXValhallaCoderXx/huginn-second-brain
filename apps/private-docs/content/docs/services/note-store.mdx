@@ -1,41 +1,68 @@
 ---
-title: Note Store
-description: Persistent knowledge base service for user notes with search, tagging, and ownership management.
+title: Note Store v2
+description: Advanced knowledge management service with semantic search, graph linking, revision tracking, and pgvector embeddings.
 ---
 
-# Note Store
+# Note Store v2
 
-The **NoteStore** provides persistent knowledge management for user-captured notes. Supports **full-text search**, **tag-based filtering**, **ownership isolation**, and **source tracking** for AI agent integration.
+The **NoteStore v2** provides comprehensive knowledge management with **semantic search**, **graph linking**, **revision tracking**, and **embedding generation**. Supports **full-text search**, **tag-based filtering**, **ownership isolation**, and **source tracking** for AI agent integration.
 
 ## Interface
 
 ```typescript
 interface NoteStore {
+  // Core CRUD
   create(accountId: string, note: CreateNoteInput): Promise<Note>;
   update(noteId: string, accountId: string, updates: UpdateNoteInput): Promise<Note | null>;
   delete(noteId: string, accountId: string): Promise<void>;
   get(noteId: string, accountId: string): Promise<Note | null>;
-  search(accountId: string, query: string, limit?: number): Promise<Note[]>;
   list(accountId: string, options?: ListNotesOptions): Promise<Note[]>;
+  
+  // Search implementations
+  search(accountId: string, query: string, limit?: number): Promise<Note[]>;
+  searchFullText(accountId: string, query: string, limit?: number): Promise<Note[]>;
+  searchSemantic(accountId: string, text: string, limit?: number, minSimilarity?: number): Promise<ScoredNote[]>;
+  
+  // Graph operations
+  link(sourceNoteId: string, targetNoteId: string, relationship: NoteRelationship): Promise<NoteLink>;
+  unlink(sourceNoteId: string, targetNoteId: string): Promise<void>;
+  getLinks(noteId: string): Promise<NoteLink[]>;
+  getGraph(accountId: string): Promise<KnowledgeGraph>;
+  getStats(accountId: string): Promise<KnowledgeStats>;
+  
+  // Embeddings
+  embed(text: string): Promise<number[]>;
+  upsertEmbedding(noteId: string, content: string): Promise<void>;
+  
+  // Utility / backfill
   tags(accountId: string): Promise<string[]>;
+  listAll(): Promise<Note[]>; // For backfill scripts
 }
 ```
 
-## Factory Function
+## Factory Function v2
 
 ```typescript
 import { createNoteStore } from "@huginn/shared";
 
+// With embeddings support
+const noteStore = createNoteStore(db, process.env.OPENROUTER_API_KEY);
+
+// Without embeddings (degrades gracefully)
 const noteStore = createNoteStore(db);
 ```
 
 **Location:** [`packages/shared/src/services/note-store.ts`](packages/shared/src/services/note-store.ts)
 
-## Core Functionality
+<Callout type="warn">
+When `openrouterApiKey` is provided, create/update operations automatically trigger fire-and-forget embedding generation.
+</Callout>
 
-### 1. CRUD Operations
+## Core Functionality v2
 
-**Create notes with metadata:**
+### 1. Enhanced CRUD Operations
+
+**Create notes with fire-and-forget embeddings:**
 
 ```typescript
 const note = await noteStore.create(accountId, {
@@ -45,98 +72,217 @@ const note = await noteStore.create(accountId, {
   capturedBy: "user",
   source: { threadId: "tg-chat-123", channel: "telegram" },
 });
+// Embedding generated asynchronously if OpenRouter key provided
 ```
 
-**Update with ownership checks:**
+**Update with revision tracking:**
 
 ```typescript
 const updated = await noteStore.update(noteId, accountId, {
   title: "Updated title",
   tags: ["technical", "api", "rate-limits"],
+  reason: "Added rate limit details", // Required for revision tracking
 });
-// Returns null if note not found or wrong owner
+// Previous state pushed to revisions[] before update
+// New embedding generated if content changed
 ```
 
-### 2. Full-Text Search
+### 2. Three Search Implementations
 
-**ILIKE search across title and content:**
+**Backward-compatible ILIKE search:**
 
 ```typescript
+// Unchanged - for agent tool compatibility
 const results = await noteStore.search(accountId, "rate limit", 10);
-// Searches: title ILIKE '%rate limit%' OR content ILIKE '%rate limit%'
+// Uses: title ILIKE '%rate limit%' OR content ILIKE '%rate limit%'
 ```
 
-**Case-insensitive, partial matches supported.**
-
-### 3. Tag Management
-
-**Filter by tags using array overlap:**
+**Full-text search (PostgreSQL tsvector):**
 
 ```typescript
-const workNotes = await noteStore.list(accountId, {
-  tags: ["work", "decision"], // Notes with ANY of these tags
-  capturedBy: "agent",
-  limit: 50,
-  orderBy: "created_at",
-});
+const results = await noteStore.searchFullText(accountId, "API rate limiting", 10);
+// Uses: search_vector @@ plainto_tsquery('API rate limiting')
+// Ordered by: ts_rank(search_vector, query) DESC
 ```
 
-**Get all unique tags:**
+**Semantic search (pgvector cosine distance):**
 
 ```typescript
-const allTags = await noteStore.tags(accountId);
-// Returns: string[] from DISTINCT unnest(tags)
+const results = await noteStore.searchSemantic(accountId, "API rate limiting", 5, 0.7);
+// Returns: ScoredNote[] with similarity scores
+// Uses: ORDER BY embedding <=> $embedding_vector LIMIT 5
 ```
 
-### 4. Source Tracking
+### 3. Graph Operations
 
-**NoteSource captures conversation context:**
+**Create bidirectional links:**
 
 ```typescript
-interface NoteSource {
-  threadId?: string; // "tg-chat-123" | "chat-account-timestamp"
-  channel?: string; // "telegram" | "web"
+const link = await noteStore.link(sourceNoteId, targetNoteId, "extends");
+// Relationship types: "related" | "extends" | "contradicts" | "supersedes"
+// Unique constraint prevents duplicate links
+```
+
+**Query note relationships:**
+
+```typescript
+const links = await noteStore.getLinks(noteId);
+// Returns all outbound and inbound links for the note
+
+const graph = await noteStore.getGraph(accountId);
+// Returns full knowledge graph: { nodes: GraphNode[], edges: GraphEdge[] }
+
+const stats = await noteStore.getStats(accountId);
+// Returns: { noteCount: number, linkCount: number }
+```
+
+### 4. Revision Tracking
+
+**Automatic history preservation:**
+
+```typescript
+interface NoteRevision {
+  title: string;
+  content: string;
+  reason: string;
+  updatedAt: string;
+}
+
+// Current note.revisions[] contains all historical states
+const current = await noteStore.get(noteId, accountId);
+console.log(current.revisions); // Array of all previous versions
+```
+
+### 5. Embedding Generation
+
+**Direct embedding API:**
+
+```typescript
+const vector = await noteStore.embed("Some text to embed");
+// Returns: number[] (1536 dimensions for text-embedding-3-small)
+
+await noteStore.upsertEmbedding(noteId, "Updated content");
+// Generates and stores embedding for the note
+```
+
+## New Type Definitions
+
+```typescript
+type NoteRelationship = "related" | "extends" | "contradicts" | "supersedes";
+
+interface NoteRevision {
+  title: string;
+  content: string;
+  reason: string;
+  updatedAt: string;
+}
+
+interface NoteLink {
+  id: string;
+  sourceNoteId: string;
+  targetNoteId: string;
+  relationship: NoteRelationship;
+  createdAt: string;
+}
+
+interface ScoredNote extends Note {
+  similarity: number;
+}
+
+interface KnowledgeGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+interface KnowledgeStats {
+  noteCount: number;
+  linkCount: number;
+}
+
+// Updated UpdateNoteInput now requires reason
+interface UpdateNoteInput {
+  title?: string;
+  content?: string;
+  tags?: string[];
+  reason: string; // Required for revision tracking
 }
 ```
 
-## Key Implementation Details
+## Key Implementation Details v2
 
-### Ownership & Security
+### Ownership & Security (Unchanged)
 
 - **Account isolation:** All queries filtered by `accountId`
 - **Ownership checks:** Update/delete operations verify note belongs to account
 - **No cross-user access:** Service layer enforces account boundaries
+- **Cascade deletes:** Links automatically deleted when notes are deleted
 
-### Search Implementation
+### Search Implementation Details
 
 ```sql
--- search() uses ILIKE for fuzzy matching
+-- search() uses ILIKE for fuzzy matching (unchanged)
 SELECT * FROM notes
 WHERE account_id = $1
   AND (title ILIKE $2 OR content ILIKE $2)
-ORDER BY updated_at DESC
-LIMIT $3;
+ORDER BY updated_at DESC LIMIT $3;
+
+-- searchFullText() uses PostgreSQL tsvector
+SELECT *, ts_rank(search_vector, plainto_tsquery($2)) as rank 
+FROM notes
+WHERE account_id = $1 
+  AND search_vector @@ plainto_tsquery($2)
+ORDER BY rank DESC LIMIT $3;
+
+-- searchSemantic() uses pgvector cosine distance
+SELECT *, (1 - (embedding <=> $2)) as similarity
+FROM notes n
+JOIN note_embeddings ne ON n.id = ne.note_id
+WHERE n.account_id = $1 
+  AND (1 - (embedding <=> $2)) >= $3
+ORDER BY embedding <=> $2 LIMIT $4;
 ```
 
-### Tag Filtering
+### Graph Implementation
 
 ```sql
--- list() with tags uses array overlap operator
-SELECT * FROM notes
-WHERE account_id = $1
-  AND tags && $2  -- Array overlap
-ORDER BY created_at DESC;
+-- Links table with bidirectional queries
+CREATE TABLE note_links (
+  id UUID PRIMARY KEY,
+  source_note_id UUID REFERENCES notes(id) ON DELETE CASCADE,
+  target_note_id UUID REFERENCES notes(id) ON DELETE CASCADE,
+  relationship TEXT CHECK (relationship IN ('related', 'extends', 'contradicts', 'supersedes')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(source_note_id, target_note_id)
+);
 ```
 
-### Timestamp Handling
+### Embedding Pipeline
 
-- **Database:** `TIMESTAMPTZ` for created_at, updated_at
-- **TypeScript:** Converted to ISO string format
-- **Automatic:** `updated_at` refreshed on every update
+**Fire-and-forget pattern:**
 
-## Database Schema
+```typescript
+// In create/update operations
+if (this.openrouterApiKey) {
+  // Don't await - fire and forget
+  this.upsertEmbedding(note.id, `${note.title}\n\n${note.content}`)
+    .catch(err => console.error('Embedding generation failed:', err));
+}
+```
 
-**Table:** [`packages/shared/src/schema/notes.ts`](packages/shared/src/schema/notes.ts)
+**Rate limiting in backfill:**
+
+```typescript
+// apps/agent/src/scripts/backfill-embeddings.ts
+for (const note of notes) {
+  await noteStore.upsertEmbedding(note.id, `${note.title}\n\n${note.content}`);
+  // 200ms rate limiting between requests
+  await new Promise(resolve => setTimeout(resolve, 200));
+}
+```
+
+## Database Schema v2
+
+**Enhanced notes table:**
 
 ```sql
 CREATE TABLE notes (
@@ -147,7 +293,97 @@ CREATE TABLE notes (
   tags TEXT[] NOT NULL DEFAULT '{}',
   source JSONB,
   captured_by TEXT NOT NULL CHECK (captured_by IN ('user', 'agent')),
+  revisions JSONB NOT NULL DEFAULT '[]', -- NEW: NoteRevision[]
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  search_vector TSVECTOR GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', title), 'A') ||
+    setweight(to_tsvector('english', content), 'B')
+  ) STORED -- NEW: Full-text search
+);
+
+CREATE INDEX notes_search_vector_idx ON notes USING GIN(search_vector);
+```
+
+**New embeddings table:**
+
+```sql
+CREATE TABLE note_embeddings (
+  note_id UUID PRIMARY KEY REFERENCES notes(id) ON DELETE CASCADE,
+  embedding VECTOR(1536) NOT NULL, -- OpenAI text-embedding-3-small
+  embedded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX note_embeddings_vector_idx ON note_embeddings 
+USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+**New links table:**
+
+```sql
+CREATE TABLE note_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  target_note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  relationship TEXT NOT NULL CHECK (relationship IN ('related', 'extends', 'contradicts', 'supersedes')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(source_note_id, target_note_id)
+);
+```
+
+## Web Server Function Integration
+
+**Updated search endpoint:**
+
+```typescript
+// apps/web/src/lib/server-fns.ts
+export const searchNotes = createServerFn()
+  .inputValidator(z.string())
+  .handler(async (query, { request }) => {
+    const { accountId } = await resolveAuthenticatedAccount(request);
+    const noteStore = createNoteStore(db);
+    
+    // Now uses full-text search instead of ILIKE
+    return await noteStore.searchFullText(accountId, query, 20);
+  });
+```
+
+**New graph endpoints:**
+
+```typescript
+export const getKnowledgeStats = createServerFn()
+  .handler(async ({ request }) => {
+    const { accountId } = await resolveAuthenticatedAccount(request);
+    const noteStore = createNoteStore(db);
+    return await noteStore.getStats(accountId);
+  });
+
+export const getLinkedNotes = createServerFn()
+  .inputValidator(z.string())
+  .handler(async (noteId, { request }) => {
+    const { accountId } = await resolveAuthenticatedAccount(request);
+    const noteStore = createNoteStore(db);
+    return await noteStore.getLinks(noteId);
+  });
+```
+
+## Migration and Backfill
+
+**Custom migration for pgvector:**
+
+```bash
+# Run custom SQL migration
+pnpm db:migrate-custom
+
+# Backfill embeddings for existing notes
+cd apps/agent && pnpm tsx src/scripts/backfill-embeddings.ts
+```
+
+**Files:**
+
+- **Migration:** [`packages/shared/migrations/add-search-vector.sql`](packages/shared/migrations/add-search-vector.sql)
+- **Runner:** [`packages/shared/run-custom-migration.mjs`](packages/shared/run-custom-migration.mjs)
+- **Backfill:** [`apps/agent/src/scripts/backfill-embeddings.ts`](apps/agent/src/scripts/backfill-embeddings.ts)
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```

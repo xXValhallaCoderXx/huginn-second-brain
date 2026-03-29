@@ -1,21 +1,28 @@
 ---
 title: Knowledge Base
-description: Save and recall important facts, decisions, and preferences — captured automatically by Huginn or saved manually from the dashboard.
+description: Save and recall important facts, decisions, and preferences — captured automatically by Huginn or added manually from the dashboard.
 ---
 
-Huginn keeps a personal knowledge base for you. As you chat, it quietly captures things worth remembering — a preference you mentioned, a decision you made, a fact you shared. You can also tell Huginn to save something explicitly, search and browse everything it knows about you, and create notes directly from the dashboard.
+Huginn keeps a personal knowledge base for you. As you chat, it quietly captures things worth remembering — a preference you mentioned, a decision you made, a fact you shared. You can also ask Huginn to save something explicitly, search and browse everything it knows about you, and create or edit notes directly from the dashboard.
 
-The same knowledge base is accessible everywhere: notes saved via Telegram show up on the web, and notes you create on the dashboard are available when chatting on Telegram.
+The same knowledge base is accessible everywhere: notes saved via Telegram show up on the web, and notes you create on the dashboard are available when you're chatting on Telegram.
 
 ## Automatic knowledge capture
 
-During normal conversation, Huginn notices when you share something meaningful — a preference, a goal, a decision, a recurring fact about your life — and saves it as a note without interrupting the flow of the conversation. When it does, it briefly acknowledges: **"I noted that down."**
+During normal conversation, Huginn notices when you share something meaningful — a preference, a goal, a decision, a recurring fact about your life — and saves it without interrupting the flow. When it does, it briefly confirms: **"Noted — saved [title] to your knowledge base."**
 
 You don't need to do anything for this to happen. Just chat naturally and Huginn builds up your knowledge base over time.
 
+### Smart consolidation
+
+Huginn doesn't just pile up separate notes for every new thing you mention. Before creating anything new, it searches your existing knowledge base and decides whether the new information belongs inside a note that already exists.
+
+For example, if you once told Huginn "my favourite language is Rust" and you later say "I also really enjoy TypeScript," Huginn will **update** the existing note — broadening it to cover both — rather than creating a second, nearly identical note. The result is a cleaner, more useful knowledge base that grows richer over time instead of cluttered.
+
 <Callout type="info">
   Huginn is selective about what it captures. It saves things that are likely to be useful later,
-  not a transcript of everything you said.
+  not a transcript of everything you said. When it updates an existing note, a revision is recorded
+  so nothing is ever lost.
 </Callout>
 
 ## Asking Huginn to remember something
@@ -26,31 +33,38 @@ If you want to make sure something is saved, just tell Huginn directly:
 - "Save this: my emergency contact is Jordan, +1-555-0123."
 - "Note that we decided to go with the blue colour scheme."
 
-Huginn will confirm with a short acknowledgement and save the note immediately.
+Continuing a topic works too — if you follow up with more details on something you previously mentioned, Huginn treats that as explicit context to save and will update the relevant note automatically.
+
+Huginn confirms with a short acknowledgement:
+
+- **New note:** "Noted — saved [title] to your knowledge base."
+- **Updated note:** "Updated your note on [title] with the new information."
 
 ## Recalling saved knowledge
 
-You can ask Huginn to search your knowledge base in natural language at any time:
+You can ask Huginn about your knowledge base in natural language at any time:
 
 - "What do you know about my diet preferences?"
 - "Do you have anything saved about my home network setup?"
 - "What did I tell you about the project deadline?"
 
-Huginn searches your saved notes and surfaces the most relevant ones in its answer.
+Huginn uses **semantic search** to find the most relevant notes — meaning it understands the meaning of your question, not just the exact words. Asking "what are my tech preferences?" will surface a note titled "Programming Language Preferences" even though those exact words don't appear in your question.
 
 ## The Knowledge Base page
 
-The **Knowledge Base** page in the dashboard gives you a full view of everything that's been saved. You can reach it from the **Knowledge** link in the top navigation bar, between Chat and Settings.
+The **Knowledge Base** page in the dashboard gives you a full view of everything that's been saved. Reach it from the **Knowledge** link in the top navigation bar.
+
+At the top of the page, a stats line shows you at a glance how many notes and connections are in your knowledge base — for example, **"4 notes · 1 connection"**.
 
 ### Searching and filtering
 
-At the top of the page you'll find a search bar and filter controls. You can:
+Use the search bar and filter controls to find notes quickly:
 
 - **Search by keyword** — type any word or phrase to filter notes by title and content.
-- **Filter by tag** — click any tag pill to show only notes with that tag. Click again to clear the filter.
-- **Filter by source** — show only notes captured by Huginn (sparkle icon) or notes you created manually (bookmark icon).
+- **Filter by source** — use the **All**, **Saved by Me**, or **Captured by Huginn** pills to narrow by who created the note.
+- **Filter by tag** — click any tag in the tag cloud to show only notes with that tag. Click **Apply Filters** to confirm your selection.
 
-Filters stack: you can combine a keyword search with a tag filter at the same time.
+You can combine a keyword search with source and tag filters at the same time.
 
 ### Creating a note manually
 
@@ -58,32 +72,30 @@ Filters stack: you can combine a keyword search with a tag filter at the same ti
 <Step>
 ### Open the Knowledge Base page
 
-Click **Knowledge** in the top navigation bar to go to the Knowledge Base page.
-
+Click **Knowledge** in the top navigation bar.
 </Step>
 <Step>
 ### Click New Note
 
-Click the **New Note** button in the top-right corner of the page. A blank note form will appear.
-
+Click the **New Note** button in the top-right corner. A blank note form will appear.
 </Step>
 <Step>
 ### Fill in the details
 
 Enter a **title** and the note **content**. You can optionally add **tags** to help organise and filter your notes later.
-
 </Step>
 <Step>
 ### Save the note
 
 Click **Save** to create the note. It will appear in your note list immediately.
-
 </Step>
 </Steps>
 
 ### Editing a note
 
-Click on any note to open it in inline edit mode. You can update the title and content directly. Changes are saved when you click **Save**.
+Click on any note to open it in inline edit mode. You can update the title and content directly. You will be asked to provide an **edit reason** — a short description of what you changed. This reason is stored in the note's revision history so you can always see why a note evolved.
+
+Click **Save** when you're done.
 
 ### Deleting a note
 
@@ -96,7 +108,7 @@ Each note has a **Delete** button. Clicking it will show an inline confirmation 
 
 ## Dashboard preview
 
-The main dashboard shows a **Saved Knowledge** card with your five most recently added notes. This gives you a quick glance at what's been captured recently without navigating to the full Knowledge Base page.
+The main dashboard shows a **Saved Knowledge** card displaying your note count and connection count — for example, **"4 notes · 1 connection"**. This gives you a quick snapshot of your knowledge base without navigating away from the dashboard.
 
 ## Understanding note metadata
 
@@ -108,8 +120,13 @@ Every note shows:
 | **Content**        | The full text of the note                                                                            |
 | **Tags**           | Colour-coded pills for filtering and organisation                                                    |
 | **Captured by**    | A bookmark icon means you created it manually; a sparkle icon means Huginn captured it automatically |
-| **Date**           | When the note was created                                                                            |
+| **Revisions**      | A badge (e.g. "1 rev") appears on notes that have been updated — showing how many times they changed |
+| **Date**           | When the note was first created                                                                      |
 | **Source channel** | Whether the note came from the web dashboard or Telegram                                             |
+
+### Connections
+
+Notes can be linked to related notes, forming a small knowledge graph. The stats line in the page header counts how many connections exist across your knowledge base. A full Graph view is planned for a future release.
 
 ## Cross-channel access
 

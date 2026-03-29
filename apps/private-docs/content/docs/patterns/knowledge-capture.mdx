@@ -1,34 +1,39 @@
 ---
-title: Knowledge Capture
-description: Persistent note-taking architecture spanning agent tools, conversation tracking, and web dashboard integration.
+title: Knowledge Capture v2
+description: Advanced knowledge management with embeddings, graph linking, and revision tracking across all conversation channels.
 ---
 
-# Knowledge Capture Pattern
+# Knowledge Capture v2 Pattern
 
-Huginn's **Knowledge Capture** feature provides persistent note-taking across all conversation channels. Uses **agent tools** for automatic capture, **RequestContext wiring** for account isolation, and **prompt engineering** for intelligent capture decisions.
+Huginn's **Knowledge Capture v2** provides intelligent knowledge management with **semantic search**, **graph linking**, **revision tracking**, and **category-based consolidation**. Uses **agent tools** for automatic capture, **RequestContext wiring** for account isolation, and **prompt engineering** for consolidation-first behavior.
 
 ## Architecture Overview
 
-**Three-layer system:**
+**Four-layer system with embeddings and graph:**
 
-1. **Data Layer:** `NoteStore` service with PostgreSQL persistence
-2. **Agent Layer:** Three Mastra tools for save/recall/delete operations
-3. **Web Layer:** Dashboard for manual note management
+1. **Data Layer:** `NoteStore` service with PostgreSQL + pgvector
+2. **Embedding Layer:** OpenRouter text-embedding-3-small (1536 dimensions)
+3. **Agent Layer:** Unified `capture-knowledge` tool + `recall-notes` + `delete-note`
+4. **Web Layer:** Dashboard with full-text search, semantic search, and graph visualization
 
-**Cross-channel consistency:** Same `accountId`, different `channel` values, unified `NoteSource` tracking.
+**Cross-channel consistency:** Same `accountId`, different `channel` values, unified `NoteSource` tracking with revision history.
 
-## RequestContext Wiring Pattern
+<Callout type="info">
+**Key v2 Change:** Category-based consolidation replaces similarity thresholds. The agent MUST update existing notes on the same topic rather than creating duplicates.
+</Callout>
 
-### Service Injection
+## RequestContext Wiring Pattern v2
 
-**Agent endpoints** inject `note-store` into RequestContext:
+### Service Injection with Embeddings
+
+**Agent endpoints** inject `note-store` with OpenRouter API key:
 
 ```typescript
 // apps/agent/src/index.ts - HTTP endpoints
 app.post("/chat", async (c) => {
   const requestContext = new RequestContext();
   requestContext.set("account-id", accountId);
-  requestContext.set("note-store", createNoteStore(db));
+  requestContext.set("note-store", createNoteStore(db, process.env.OPENROUTER_API_KEY));
   requestContext.set("thread-id", `chat-${accountId}-${Date.now()}`);
   requestContext.set("channel", "web");
 
@@ -43,7 +48,7 @@ app.post("/chat", async (c) => {
 bot.on("message:text", async (ctx) => {
   const requestContext = new RequestContext();
   requestContext.set("account-id", account.id);
-  requestContext.set("note-store", createNoteStore(db));
+  requestContext.set("note-store", createNoteStore(db, process.env.OPENROUTER_API_KEY));
   requestContext.set("thread-id", `tg-chat-${ctx.chat.id}`);
   requestContext.set("channel", "telegram");
 
@@ -51,7 +56,7 @@ bot.on("message:text", async (ctx) => {
 });
 ```
 
-### HuginnContext Type
+### HuginnContext Type (Unchanged)
 
 **Agent receives typed context:**
 
@@ -61,17 +66,17 @@ export type HuginnContext = {
   "account-id": string;
   "personality-store": PersonalityStore;
   "calendar-service"?: CalendarService;
-  "note-store"?: NoteStore; // Added for knowledge capture
+  "note-store"?: NoteStore; // Now with embeddings support
   "thread-id"?: string; // For NoteSource tracking
   channel?: string; // "web" | "telegram"
 };
 ```
 
-## Agent Tool Design Patterns
+## Agent Tool Design Patterns v2
 
-### 1. save-note Tool
+### 1. capture-knowledge Tool (Replaces save-note)
 
-**Dual capture modes:**
+**Enhanced schema with linking and updates:**
 
 ```typescript
 // Tool input schema
@@ -79,66 +84,133 @@ export type HuginnContext = {
   title: string;
   content: string;
   tags: string[];
-  isExplicit: boolean;  // User requested vs. proactive capture
+  isExplicit: boolean;          // User requested vs. proactive
+  existingNoteId?: string;      // For UPDATE operations
+  relatedNoteIds?: string[];    // For creating links
+  relationship?: "related" | "extends" | "contradicts" | "supersedes";
+  reason?: string;              // Required when updating
 }
 ```
 
-**NoteSource construction from context:**
+**Consolidation workflow from RequestContext:**
 
 ```typescript
-// apps/agent/src/mastra/tools/save-note.ts
-const threadId = context?.requestContext?.get("thread-id") as string;
-const channel = context?.requestContext?.get("channel") as string;
+// apps/agent/src/mastra/tools/capture-knowledge.ts
+if (input.existingNoteId) {
+  // UPDATE existing note
+  const updated = await noteStore.update(input.existingNoteId, accountId, {
+    title: input.title,
+    content: input.content,
+    tags: input.tags,
+    reason: input.reason ?? "Updated with new information",
+    // This automatically pushes old state to revisions[]
+  });
+  action = "updated";
+} else {
+  // CREATE new note
+  const created = await noteStore.create(accountId, {
+    title: input.title,
+    content: input.content,
+    tags: input.tags,
+    capturedBy: input.isExplicit ? "user" : "agent",
+    source: threadId ? { threadId, channel } : undefined,
+  });
+  // Fire-and-forget embedding generation if OpenRouter key provided
+  action = "created";
+}
 
-const note = await noteStore.create(accountId, {
-  title,
-  content,
-  tags,
-  capturedBy: input.isExplicit ? "user" : "agent",
-  source: threadId ? { threadId, channel } : undefined,
-});
+// Create links if relatedNoteIds provided
+if (input.relatedNoteIds?.length) {
+  const relationship = input.relationship ?? "related";
+  for (const relatedId of input.relatedNoteIds) {
+    await noteStore.link(noteId, relatedId, relationship);
+  }
+}
 ```
 
-### 2. recall-notes Tool
+### 2. recall-notes Tool (Enhanced)
 
-**Flexible search interface:**
+**Three search modes:**
 
 ```typescript
-// Query-based search
+// Full-text search (PostgreSQL tsvector)
 if (input.query) {
-  notes = await noteStore.search(accountId, input.query, 10);
+  notes = await noteStore.searchFullText(accountId, input.query, 10);
 }
 
-// Tag-based filtering
+// Semantic search (pgvector cosine distance)
+if (input.semanticQuery) {
+  const scored = await noteStore.searchSemantic(accountId, input.semanticQuery, 5);
+  notes = scored.map(s => ({ ...s, similarity: undefined }));
+}
+
+// Tag-based filtering (unchanged)
 if (input.tags) {
   notes = await noteStore.list(accountId, { tags: input.tags });
 }
 ```
 
-### 3. delete-note Tool
+### 3. delete-note Tool (Unchanged)
 
 **Ownership verification built-in:**
 
 ```typescript
 await noteStore.delete(input.noteId, accountId);
-// NoteStore.delete() handles ownership check automatically
+// NoteStore.delete() handles ownership check and cascades links
 ```
 
-## Instruction Prompt Engineering
+## Instruction Prompt Engineering v2
 
-### Knowledge Capture Section
+### Knowledge Capture Section with Consolidation Rule
 
-**BASE_INSTRUCTIONS includes behavioral guidelines:**
+**BASE_INSTRUCTIONS emphasizes search-before-save and consolidation:**
 
 ```
 ## Knowledge Capture
-You have a persistent knowledge base for each user. Use the save-note,
-recall-notes, and delete-note tools to manage it.
+
+You have a knowledge base — a graph of notes that you maintain for the user.
+This is their second brain. Treat it with care.
+
+### The search-before-save rule
+
+NEVER create a note without searching first. Always call recall-notes before
+capture-knowledge. This is the most important rule. Duplicates destroy the
+knowledge graph.
+
+Decision flow:
+1. Detect knowledge worth saving (or receive explicit instruction)
+2. Call recall-notes with a query describing the knowledge
+3. Examine the results:
+
+**UPDATE or CREATE? The consolidation rule:**
+
+If recall-notes returns ANY note that covers the same category or topic,
+you MUST update that note instead of creating a new one. Consolidate
+the new information into the existing note.
+
+What counts as "same category":
+- Both about the user's preferences for the same kind of thing
+  (languages, tools, foods, hobbies)
+- Both about the same person, project, or system
+- Both about the same concept, just with new details
+
+Examples of CORRECT behavior:
+- Note "Favorite language is Rust" exists → user says "I also love
+  TypeScript" → UPDATE the note. New title: "Programming Languages".
+  New content covers both Rust and TypeScript.
+- Note "Project Alpha — Tech Stack" exists → user says "we added Redis
+  to Project Alpha" → UPDATE the note with the new detail.
+
+Examples of WRONG behavior (never do this):
+- Creating "Programming Language Preference - Rust" AND "Programming
+  Language Preference - TypeScript" as separate notes. These are the
+  same category and MUST be one note.
+- Creating a new note for every individual fact. Consolidate.
 
 ### Explicit capture
 When the user says "remember this", "save this", "note this down", or
-similar — save a note immediately using save-note with isExplicit: true.
-Confirm briefly: "Saved." Don't over-explain.
+similar — save a note immediately using capture-knowledge with 
+isExplicit: true. Confirm briefly: "Saved." Don't over-explain.
 
 ### Proactive capture
 When a conversation contains a decision, preference, important fact, or
@@ -149,6 +221,163 @@ the content factual. Mention it briefly: "I noted that down."
 ### Guardrails
 - Never save transient chit-chat, greetings, or trivial small talk.
 - Never save sensitive data (passwords, tokens, secrets) as notes.
+- Prefer consolidation: If in doubt whether to merge or split, merge.
+```
+
+## Revision Tracking Pattern
+
+**Automatic history preservation:**
+
+Every `update()` operation pushes the previous state to the `revisions[]` array before applying changes:
+
+```typescript
+interface NoteRevision {
+  title: string;
+  content: string;
+  reason: string;
+  updatedAt: string;
+}
+```
+
+**Implementation in NoteStore:**
+
+```typescript
+// packages/shared/src/services/note-store.ts - update method
+const current = await this.get(noteId, accountId);
+if (!current) return null;
+
+// Push current state to revisions
+const revision: NoteRevision = {
+  title: current.title,
+  content: current.content,
+  reason: updates.reason ?? "Updated",
+  updatedAt: new Date().toISOString(),
+};
+
+const newRevisions = [...current.revisions, revision];
+
+// Update with new content and revisions
+await db.update(notes)
+  .set({ 
+    title: updates.title, 
+    content: updates.content, 
+    revisions: newRevisions,
+    updatedAt: new Date() 
+  })
+  .where(and(eq(notes.id, noteId), eq(notes.accountId, accountId)));
+```
+
+<Callout type="warn">
+The `reason` field is required when updating notes to maintain meaningful revision history.
+</Callout>
+
+## Knowledge Graph Linking
+
+**Relationship types and management:**
+
+```typescript
+type NoteRelationship = "related" | "extends" | "contradicts" | "supersedes";
+
+interface NoteLink {
+  id: string;
+  sourceNoteId: string;
+  targetNoteId: string;
+  relationship: NoteRelationship;
+  createdAt: string;
+}
+```
+
+**Agent linking workflow:**
+
+```typescript
+// capture-knowledge tool automatically creates links
+if (input.relatedNoteIds?.length) {
+  const relationship = input.relationship ?? "related";
+  for (const relatedId of input.relatedNoteIds) {
+    await noteStore.link(noteId, relatedId, relationship);
+  }
+  // Bidirectional linking handled by unique constraint
+}
+```
+
+**Web dashboard integration:**
+
+```typescript
+// apps/web/src/lib/server-fns.ts
+export const getLinkedNotes = createServerFn()
+  .inputValidator(z.string())
+  .handler(async (noteId, { request }) => {
+    const { accountId } = await resolveAuthenticatedAccount(request);
+    const noteStore = createNoteStore(db);
+    return await noteStore.getLinks(noteId);
+  });
+```
+
+## Cross-Channel Architecture (Enhanced)
+
+**Channel isolation with unified embeddings:**
+
+| Channel   | ThreadId Format         | NoteSource Pattern | Embedding Scope |
+|-----------|-------------------------|-------------------|-----------------|
+| Web App   | `chat-${accountId}-${timestamp}` | `{ threadId, channel: "web" }` | Account-wide |
+| Telegram  | `tg-chat-${chatId}`     | `{ threadId, channel: "telegram" }` | Account-wide |
+
+**Embedding generation is channel-agnostic** — all notes for an account share the same vector space for semantic search.
+
+**Source tracking preserves conversation context:**
+
+```typescript
+interface NoteSource {
+  channel: string;
+  threadId: string;
+  messageId?: string;
+  capturedAt: string;
+}
+```
+
+<Callout type="info">
+**Performance Note:** Embeddings are generated asynchronously via fire-and-forget to avoid blocking conversation flow.
+</Callout>
+
+## Backfill and Migration
+
+**Custom migration runner for pgvector setup:**
+
+```typescript
+// packages/shared/run-custom-migration.mjs
+const migration = await fs.readFile('./migrations/add-search-vector.sql', 'utf8');
+await client.query(migration);
+```
+
+**Embedding backfill script:**
+
+```bash
+# Generate embeddings for all existing notes
+cd apps/agent
+pnpm tsx src/scripts/backfill-embeddings.ts
+```
+
+**Rate limiting and progress tracking:**
+
+```typescript
+// apps/agent/src/scripts/backfill-embeddings.ts
+for (let i = 0; i < allNotes.length; i++) {
+  const note = allNotes[i];
+  const content = `${note.title}\n\n${note.content}`;
+  
+  try {
+    await noteStore.upsertEmbedding(note.id, content);
+    console.log(`[${i + 1}/${allNotes.length}] Embedded: "${note.title}"`);
+  } catch (error) {
+    console.error(`Failed to embed note ${note.id}:`, error);
+  }
+  
+  // Rate limiting: 200ms between requests
+  if (i < allNotes.length - 1) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+}
+```
 - When in doubt, don't save — false negatives are better than noise.
 - Use tags to categorise notes (e.g. ["decision", "api"], ["preference"]).
 - Before saving, quickly recall-notes to avoid duplicates on the same topic.
