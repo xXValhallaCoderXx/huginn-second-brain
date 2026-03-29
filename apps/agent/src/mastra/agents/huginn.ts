@@ -10,7 +10,7 @@ import {
 } from "../../identity/instructions.js";
 import { storage } from "../storage.js";
 import { getCalendarTool } from "../tools/get-calendar.js";
-import { saveNoteTool } from "../tools/save-note.js";
+import { captureKnowledgeTool } from "../tools/capture-knowledge.js";
 import { recallNotesTool } from "../tools/recall-notes.js";
 import { deleteNoteTool } from "../tools/delete-note.js";
 
@@ -39,7 +39,7 @@ export const huginnAgent = new Agent({
     model: "openrouter/anthropic/claude-sonnet-4",
     tools: {
         "get-calendar": getCalendarTool,
-        "save-note": saveNoteTool,
+        "capture-knowledge": captureKnowledgeTool,
         "recall-notes": recallNotesTool,
         "delete-note": deleteNoteTool,
     },

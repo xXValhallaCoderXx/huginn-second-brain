@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { getTodayCalendarEvents, loadPersonalityFiles, getNotes } from "../../lib/server-fns";
+import { getTodayCalendarEvents, loadPersonalityFiles, getNotes, getKnowledgeStats } from "../../lib/server-fns";
 
 export interface SerializedCalendarEvent {
     id: string;
@@ -16,12 +16,13 @@ export interface SerializedCalendarEvent {
 export const Route = createFileRoute("/_authenticated/dashboard")({
     component: Dashboard,
     loader: async ({ context }) => {
-        const [personality, calendarEvents, recentNotes] = await Promise.all([
+        const [personality, calendarEvents, recentNotes, knowledgeStats] = await Promise.all([
             loadPersonalityFiles({ data: { accountId: context.account.id } }),
             getTodayCalendarEvents().catch(() => [] as SerializedCalendarEvent[]),
             getNotes({ data: { limit: 5 } }).catch(() => []),
+            getKnowledgeStats().catch(() => ({ noteCount: 0, linkCount: 0, tagCount: 0 })),
         ]);
-        return { personality, calendarEvents, recentNotes };
+        return { personality, calendarEvents, recentNotes, knowledgeStats };
     },
 });
 
@@ -65,7 +66,7 @@ function FormattedDescription({ text, maxLen = 120 }: { text: string; maxLen?: n
 
 function Dashboard() {
     const { account } = Route.useRouteContext();
-    const { personality, calendarEvents, recentNotes } = Route.useLoaderData();
+    const { personality, calendarEvents, recentNotes, knowledgeStats } = Route.useLoaderData();
     const [accountOpen, setAccountOpen] = useState(false);
 
     const soulSnippet = personality.soul
@@ -284,6 +285,9 @@ function Dashboard() {
                                 </svg>
                                 Saved Knowledge
                             </h2>
+                            <p className="text-xs text-text-muted mt-1">
+                                {knowledgeStats.noteCount} notes · {knowledgeStats.linkCount} connections
+                            </p>
                         </div>
                         <div className="p-6">
                             {recentNotes.length === 0 ? (

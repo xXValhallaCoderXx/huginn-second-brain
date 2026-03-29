@@ -287,14 +287,14 @@ export const getNotes = createServerFn({ method: "GET" })
     });
 
 /**
- * Server function: search notes by keyword.
+ * Server function: search notes using full-text search (tsvector).
  */
 export const searchNotes = createServerFn({ method: "GET" })
-    .inputValidator((data: { query: string; tags?: string[] }) => data)
+    .inputValidator((data: { query: string }) => data)
     .handler(async ({ data }) => {
         const account = await resolveAuthenticatedAccount();
         const store = createNoteStore(db);
-        return store.search(account.id, data.query, data.tags);
+        return store.searchFullText(account.id, data.query);
     });
 
 /**
@@ -305,9 +305,7 @@ export const getNote = createServerFn({ method: "GET" })
     .handler(async ({ data }) => {
         const account = await resolveAuthenticatedAccount();
         const store = createNoteStore(db);
-        const note = await store.get(data.noteId);
-        if (!note || note.accountId !== account.id) return null;
-        return note;
+        return store.get(data.noteId, account.id);
     });
 
 /**
@@ -333,7 +331,7 @@ export const createDashboardNote = createServerFn({ method: "POST" })
  */
 export const updateNote = createServerFn({ method: "POST" })
     .inputValidator(
-        (data: { noteId: string; title?: string; content?: string; tags?: string[] }) => data,
+        (data: { noteId: string; title?: string; content?: string; tags?: string[]; reason: string }) => data,
     )
     .handler(async ({ data }) => {
         const account = await resolveAuthenticatedAccount();
@@ -362,4 +360,28 @@ export const getNoteTags = createServerFn({ method: "GET" })
         const account = await resolveAuthenticatedAccount();
         const store = createNoteStore(db);
         return store.tags(account.id);
+    });
+
+/**
+ * Server function: get knowledge base stats (note count + link count).
+ */
+export const getKnowledgeStats = createServerFn({ method: "GET" })
+    .handler(async () => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        return store.getStats(account.id);
+    });
+
+/**
+ * Server function: get links for a specific note.
+ */
+export const getLinkedNotes = createServerFn({ method: "GET" })
+    .inputValidator((data: { noteId: string }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        // Verify ownership first
+        const note = await store.get(data.noteId, account.id);
+        if (!note) return [];
+        return store.getLinks(data.noteId);
     });

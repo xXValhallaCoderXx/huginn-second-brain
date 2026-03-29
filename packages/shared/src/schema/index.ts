@@ -4,5 +4,7 @@ export { calendarConnections } from "./calendar-connections";
 export { personalityFiles } from "./personality-files";
 export { linkingCodes } from "./linking-codes";
 export { notes } from "./notes";
-export type { NoteSource } from "./notes";
+export type { NoteSource, NoteRevision, NoteRelationship } from "./notes";
+export { noteEmbeddings } from "./note-embeddings";
+export { noteLinks } from "./note-links";
 export { user, session, authAccount, verification } from "./auth";

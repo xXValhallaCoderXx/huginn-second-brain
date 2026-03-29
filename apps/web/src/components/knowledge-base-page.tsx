@@ -1,27 +1,31 @@
 import { useState, useCallback } from "react";
-import type { Note } from "@huginn/shared";
+import type { Note, KnowledgeStats } from "@huginn/shared";
 import {
     getNotes,
     searchNotes,
     createDashboardNote,
     updateNote,
     deleteNote,
+    getKnowledgeStats,
 } from "../lib/server-fns";
 
 interface KnowledgeBasePageProps {
     initialNotes: Note[];
     initialTags: string[];
+    initialStats: KnowledgeStats;
 }
 
-export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePageProps) {
+export function KnowledgeBasePage({ initialNotes, initialTags, initialStats }: KnowledgeBasePageProps) {
     const [notes, setNotes] = useState<Note[]>(initialNotes);
     const [allTags, setAllTags] = useState<string[]>(initialTags);
+    const [stats, setStats] = useState<KnowledgeStats>(initialStats);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [capturedByFilter, setCapturedByFilter] = useState<"all" | "user" | "agent">("all");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTitle, setEditTitle] = useState("");
     const [editContent, setEditContent] = useState("");
+    const [editReason, setEditReason] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [newTitle, setNewTitle] = useState("");
@@ -36,10 +40,7 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
             let result: Note[];
             if (searchQuery.trim()) {
                 result = await searchNotes({
-                    data: {
-                        query: searchQuery.trim(),
-                        tags: selectedTags.length > 0 ? selectedTags : undefined,
-                    },
+                    data: { query: searchQuery.trim() },
                 });
             } else {
                 result = await getNotes({
@@ -69,12 +70,15 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
         setEditingId(note.id);
         setEditTitle(note.title);
         setEditContent(note.content);
+        setEditReason("");
     };
 
     const saveEdit = async () => {
-        if (!editingId) return;
-        await updateNote({ data: { noteId: editingId, title: editTitle, content: editContent } });
+        if (!editingId || !editReason.trim()) return;
+        await updateNote({ data: { noteId: editingId, title: editTitle, content: editContent, reason: editReason.trim() } });
         setEditingId(null);
+        const updatedStats = await getKnowledgeStats();
+        setStats(updatedStats);
         refresh();
     };
 
@@ -96,10 +100,11 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
         setNewContent("");
         setNewTags("");
         setShowCreate(false);
-        // Refresh tags list too
+        // Refresh tags list + stats
         const { getNoteTags } = await import("../lib/server-fns");
-        const updatedTags = await getNoteTags();
+        const [updatedTags, updatedStats] = await Promise.all([getNoteTags(), getKnowledgeStats()]);
         setAllTags(updatedTags);
+        setStats(updatedStats);
         refresh();
     };
 
@@ -115,7 +120,7 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
                         Knowledge Base
                     </h1>
                     <p className="text-sm text-text-muted mt-1">
-                        Notes captured from conversations and saved manually.
+                        {stats.noteCount} notes · {stats.linkCount} connections
                     </p>
                 </div>
                 <button
@@ -127,6 +132,19 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
                     </svg>
                     New Note
                 </button>
+            </div>
+
+            {/* Sub-view pills */}
+            <div className="flex items-center gap-2 mb-6">
+                <span className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent/15 text-accent-light border border-accent/30">
+                    List
+                </span>
+                <span
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/[0.04] text-text-subtle border border-border cursor-not-allowed"
+                    title="Graph view coming soon"
+                >
+                    Graph (soon)
+                </span>
             </div>
 
             {/* Create Note Form */}
@@ -274,6 +292,13 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
                                         rows={3}
                                         className="w-full bg-page border border-border rounded-lg px-3 py-1.5 text-sm text-text-body focus:outline-none focus:border-accent resize-none"
                                     />
+                                    <input
+                                        type="text"
+                                        placeholder="Reason for edit (required)"
+                                        value={editReason}
+                                        onChange={(e) => setEditReason(e.target.value)}
+                                        className="w-full bg-page border border-border rounded-lg px-3 py-1.5 text-sm text-text-body placeholder:text-text-muted focus:outline-none focus:border-accent"
+                                    />
                                     <div className="flex gap-2 justify-end">
                                         <button
                                             onClick={() => setEditingId(null)}
@@ -283,7 +308,8 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
                                         </button>
                                         <button
                                             onClick={saveEdit}
-                                            className="px-3 py-1 text-xs bg-accent text-white rounded-lg hover:bg-accent/90"
+                                            disabled={!editReason.trim()}
+                                            className="px-3 py-1 text-xs bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-40"
                                         >
                                             Save
                                         </button>
@@ -321,6 +347,11 @@ export function KnowledgeBasePage({ initialNotes, initialTags }: KnowledgeBasePa
                                                         #{tag}
                                                     </span>
                                                 ))}
+                                                {note.revisions.length > 0 && (
+                                                    <span className="px-2 py-0.5 text-xs bg-accent/10 text-accent-light rounded-full border border-accent/20" title={`${note.revisions.length} revision(s)`}>
+                                                        {note.revisions.length} rev{note.revisions.length !== 1 ? "s" : ""}
+                                                    </span>
+                                                )}
                                                 <span className="text-xs text-text-subtle">
                                                     {new Date(note.createdAt).toLocaleDateString(undefined, {
                                                         month: "short",
