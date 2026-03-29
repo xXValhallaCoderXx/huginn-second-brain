@@ -1,0 +1,242 @@
+---
+title: Knowledge Capture
+description: Persistent note-taking architecture spanning agent tools, conversation tracking, and web dashboard integration.
+---
+
+# Knowledge Capture Pattern
+
+Huginn's **Knowledge Capture** feature provides persistent note-taking across all conversation channels. Uses **agent tools** for automatic capture, **RequestContext wiring** for account isolation, and **prompt engineering** for intelligent capture decisions.
+
+## Architecture Overview
+
+**Three-layer system:**
+
+1. **Data Layer:** `NoteStore` service with PostgreSQL persistence
+2. **Agent Layer:** Three Mastra tools for save/recall/delete operations
+3. **Web Layer:** Dashboard for manual note management
+
+**Cross-channel consistency:** Same `accountId`, different `channel` values, unified `NoteSource` tracking.
+
+## RequestContext Wiring Pattern
+
+### Service Injection
+
+**Agent endpoints** inject `note-store` into RequestContext:
+
+```typescript
+// apps/agent/src/index.ts - HTTP endpoints
+app.post("/chat", async (c) => {
+  const requestContext = new RequestContext();
+  requestContext.set("account-id", accountId);
+  requestContext.set("note-store", createNoteStore(db));
+  requestContext.set("thread-id", `chat-${accountId}-${Date.now()}`);
+  requestContext.set("channel", "web");
+
+  return mastra.agent("huginn").stream({ ...messages }, { requestContext });
+});
+```
+
+**Telegram handlers** provide different channel context:
+
+```typescript
+// apps/agent/src/telegram/handlers.ts
+bot.on("message:text", async (ctx) => {
+  const requestContext = new RequestContext();
+  requestContext.set("account-id", account.id);
+  requestContext.set("note-store", createNoteStore(db));
+  requestContext.set("thread-id", `tg-chat-${ctx.chat.id}`);
+  requestContext.set("channel", "telegram");
+
+  await mastra.agent("huginn").stream(messages, { requestContext });
+});
+```
+
+### HuginnContext Type
+
+**Agent receives typed context:**
+
+```typescript
+// apps/agent/src/mastra/agents/huginn.ts
+export type HuginnContext = {
+  "account-id": string;
+  "personality-store": PersonalityStore;
+  "calendar-service"?: CalendarService;
+  "note-store"?: NoteStore; // Added for knowledge capture
+  "thread-id"?: string; // For NoteSource tracking
+  channel?: string; // "web" | "telegram"
+};
+```
+
+## Agent Tool Design Patterns
+
+### 1. save-note Tool
+
+**Dual capture modes:**
+
+```typescript
+// Tool input schema
+{
+  title: string;
+  content: string;
+  tags: string[];
+  isExplicit: boolean;  // User requested vs. proactive capture
+}
+```
+
+**NoteSource construction from context:**
+
+```typescript
+// apps/agent/src/mastra/tools/save-note.ts
+const threadId = context?.requestContext?.get("thread-id") as string;
+const channel = context?.requestContext?.get("channel") as string;
+
+const note = await noteStore.create(accountId, {
+  title,
+  content,
+  tags,
+  capturedBy: input.isExplicit ? "user" : "agent",
+  source: threadId ? { threadId, channel } : undefined,
+});
+```
+
+### 2. recall-notes Tool
+
+**Flexible search interface:**
+
+```typescript
+// Query-based search
+if (input.query) {
+  notes = await noteStore.search(accountId, input.query, 10);
+}
+
+// Tag-based filtering
+if (input.tags) {
+  notes = await noteStore.list(accountId, { tags: input.tags });
+}
+```
+
+### 3. delete-note Tool
+
+**Ownership verification built-in:**
+
+```typescript
+await noteStore.delete(input.noteId, accountId);
+// NoteStore.delete() handles ownership check automatically
+```
+
+## Instruction Prompt Engineering
+
+### Knowledge Capture Section
+
+**BASE_INSTRUCTIONS includes behavioral guidelines:**
+
+```
+## Knowledge Capture
+You have a persistent knowledge base for each user. Use the save-note,
+recall-notes, and delete-note tools to manage it.
+
+### Explicit capture
+When the user says "remember this", "save this", "note this down", or
+similar — save a note immediately using save-note with isExplicit: true.
+Confirm briefly: "Saved." Don't over-explain.
+
+### Proactive capture
+When a conversation contains a decision, preference, important fact, or
+reusable reference that the user would likely want to recall later —
+save it proactively with isExplicit: false. Keep the title concise and
+the content factual. Mention it briefly: "I noted that down."
+
+### Guardrails
+- Never save transient chit-chat, greetings, or trivial small talk.
+- Never save sensitive data (passwords, tokens, secrets) as notes.
+- When in doubt, don't save — false negatives are better than noise.
+- Use tags to categorise notes (e.g. ["decision", "api"], ["preference"]).
+- Before saving, quickly recall-notes to avoid duplicates on the same topic.
+  If a duplicate exists, update it or skip.
+```
+
+### Behavioral Pattern
+
+1. **Detection:** Agent identifies save-worthy content in conversation
+2. **Deduplication:** Quick `recall-notes` check for existing content
+3. **Save decision:** Explicit (user request) vs. proactive (agent judgment)
+4. **Confirmation:** Brief acknowledgment without over-explaining
+
+## Cross-Channel Architecture
+
+### Unified Account Model
+
+**Same user, different channels:**
+
+```typescript
+// Web conversation
+NoteSource: { threadId: "chat-account-123-1647890123", channel: "web" }
+
+// Telegram conversation
+NoteSource: { threadId: "tg-chat-456", channel: "telegram" }
+
+// Both notes belong to same accountId
+```
+
+### Thread-Level Tracking
+
+**ThreadId patterns:**
+
+- **Web:** `chat-${accountId}-${timestamp}` — new thread per conversation
+- **Telegram:** `tg-chat-${chatId}` — persistent chat context
+
+**Source tracking enables:**
+
+- Note provenance (which conversation created this?)
+- Context reconstruction (what was discussed when this was saved?)
+- Cross-channel search (notes from any conversation channel)
+
+## Web Integration Pattern
+
+### Server Functions
+
+**No drizzle-orm imports in web app:**
+
+```typescript
+// apps/web/src/lib/server-fns.ts
+export const searchNotes = createServerFn()
+  .inputValidator(z.object({ query: z.string().min(1) }))
+  .handler(async ({ query }) => {
+    const account = await resolveAuthenticatedAccount();
+    const noteStore = createNoteStore(db); // Service factory pattern
+    return noteStore.search(account.id, query);
+  });
+```
+
+**Account resolution + service factory pattern maintains drizzle-orm isolation in `@huginn/shared`.**
+
+### Dashboard Integration
+
+**Knowledge Base page:** Full CRUD interface for manual note management
+**Dashboard preview:** Recent notes widget showing last 5 notes
+
+## Tool Registration
+
+**Tools registered at both Mastra and Agent levels:**
+
+```typescript
+// apps/agent/src/mastra/index.ts - Mastra level (for Studio)
+export const mastra = new Mastra({
+  tools: {
+    "save-note": saveNoteTool,
+    "recall-notes": recallNotesTool,
+    "delete-note": deleteNoteTool,
+  },
+});
+
+// apps/agent/src/mastra/agents/huginn.ts - Agent level
+export const huginnAgent = new Agent({
+  tools: {
+    "save-note": saveNoteTool,
+    "recall-notes": recallNotesTool,
+    "delete-note": deleteNoteTool,
+  },
+});
+```
+
+**Dual registration required for Mastra Studio Tools tab visibility.**

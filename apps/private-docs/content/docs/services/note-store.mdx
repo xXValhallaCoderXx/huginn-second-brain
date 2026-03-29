@@ -1,0 +1,181 @@
+---
+title: Note Store
+description: Persistent knowledge base service for user notes with search, tagging, and ownership management.
+---
+
+# Note Store
+
+The **NoteStore** provides persistent knowledge management for user-captured notes. Supports **full-text search**, **tag-based filtering**, **ownership isolation**, and **source tracking** for AI agent integration.
+
+## Interface
+
+```typescript
+interface NoteStore {
+  create(accountId: string, note: CreateNoteInput): Promise<Note>;
+  update(noteId: string, accountId: string, updates: UpdateNoteInput): Promise<Note | null>;
+  delete(noteId: string, accountId: string): Promise<void>;
+  get(noteId: string, accountId: string): Promise<Note | null>;
+  search(accountId: string, query: string, limit?: number): Promise<Note[]>;
+  list(accountId: string, options?: ListNotesOptions): Promise<Note[]>;
+  tags(accountId: string): Promise<string[]>;
+}
+```
+
+## Factory Function
+
+```typescript
+import { createNoteStore } from "@huginn/shared";
+
+const noteStore = createNoteStore(db);
+```
+
+**Location:** [`packages/shared/src/services/note-store.ts`](packages/shared/src/services/note-store.ts)
+
+## Core Functionality
+
+### 1. CRUD Operations
+
+**Create notes with metadata:**
+
+```typescript
+const note = await noteStore.create(accountId, {
+  title: "API Rate Limits",
+  content: "OpenRouter has a 1000 req/min limit for free tier",
+  tags: ["technical", "api"],
+  capturedBy: "user",
+  source: { threadId: "tg-chat-123", channel: "telegram" },
+});
+```
+
+**Update with ownership checks:**
+
+```typescript
+const updated = await noteStore.update(noteId, accountId, {
+  title: "Updated title",
+  tags: ["technical", "api", "rate-limits"],
+});
+// Returns null if note not found or wrong owner
+```
+
+### 2. Full-Text Search
+
+**ILIKE search across title and content:**
+
+```typescript
+const results = await noteStore.search(accountId, "rate limit", 10);
+// Searches: title ILIKE '%rate limit%' OR content ILIKE '%rate limit%'
+```
+
+**Case-insensitive, partial matches supported.**
+
+### 3. Tag Management
+
+**Filter by tags using array overlap:**
+
+```typescript
+const workNotes = await noteStore.list(accountId, {
+  tags: ["work", "decision"], // Notes with ANY of these tags
+  capturedBy: "agent",
+  limit: 50,
+  orderBy: "created_at",
+});
+```
+
+**Get all unique tags:**
+
+```typescript
+const allTags = await noteStore.tags(accountId);
+// Returns: string[] from DISTINCT unnest(tags)
+```
+
+### 4. Source Tracking
+
+**NoteSource captures conversation context:**
+
+```typescript
+interface NoteSource {
+  threadId?: string; // "tg-chat-123" | "chat-account-timestamp"
+  channel?: string; // "telegram" | "web"
+}
+```
+
+## Key Implementation Details
+
+### Ownership & Security
+
+- **Account isolation:** All queries filtered by `accountId`
+- **Ownership checks:** Update/delete operations verify note belongs to account
+- **No cross-user access:** Service layer enforces account boundaries
+
+### Search Implementation
+
+```sql
+-- search() uses ILIKE for fuzzy matching
+SELECT * FROM notes
+WHERE account_id = $1
+  AND (title ILIKE $2 OR content ILIKE $2)
+ORDER BY updated_at DESC
+LIMIT $3;
+```
+
+### Tag Filtering
+
+```sql
+-- list() with tags uses array overlap operator
+SELECT * FROM notes
+WHERE account_id = $1
+  AND tags && $2  -- Array overlap
+ORDER BY created_at DESC;
+```
+
+### Timestamp Handling
+
+- **Database:** `TIMESTAMPTZ` for created_at, updated_at
+- **TypeScript:** Converted to ISO string format
+- **Automatic:** `updated_at` refreshed on every update
+
+## Database Schema
+
+**Table:** [`packages/shared/src/schema/notes.ts`](packages/shared/src/schema/notes.ts)
+
+```sql
+CREATE TABLE notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  source JSONB,
+  captured_by TEXT NOT NULL CHECK (captured_by IN ('user', 'agent')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+## Usage Patterns
+
+### Agent Integration
+
+```typescript
+// RequestContext provides noteStore to agent tools
+const noteStore = context?.requestContext?.get("note-store") as NoteStore;
+```
+
+### Web Dashboard
+
+```typescript
+// Server functions use account resolution + noteStore factory
+export const createDashboardNote = createServerFn()
+  .inputValidator(CreateNoteSchema)
+  .handler(async ({ title, content, tags }) => {
+    const account = await resolveAuthenticatedAccount();
+    const noteStore = createNoteStore(db);
+
+    return noteStore.create(account.id, {
+      title,
+      content,
+      tags: tags || [],
+      capturedBy: "user",
+    });
+  });
+```

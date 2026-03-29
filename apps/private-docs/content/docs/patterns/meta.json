@@ -1,4 +1,10 @@
 {
   "title": "Patterns",
-  "pages": ["request-context", "personality-versioning", "token-encryption", "calendar-oauth"]
+  "pages": [
+    "request-context",
+    "personality-versioning",
+    "token-encryption",
+    "calendar-oauth",
+    "knowledge-capture"
+  ]
 }

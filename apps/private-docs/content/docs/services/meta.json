@@ -1,4 +1,10 @@
 {
   "title": "Services",
-  "pages": ["account-service", "personality-store", "calendar-service", "google-calendar-provider"]
+  "pages": [
+    "account-service",
+    "personality-store",
+    "calendar-service",
+    "google-calendar-provider",
+    "note-store"
+  ]
 }
