@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { createPersonalityStore, createAccountService, createCalendarConnectionService, createCalendarService } from "@huginn/shared";
+import { createPersonalityStore, createAccountService, createCalendarConnectionService, createCalendarService, createNoteStore } from "@huginn/shared";
 import { auth } from "./auth";
 import { db } from "./db";
 import { resolveAccount } from "./account-resolution";
@@ -263,4 +263,103 @@ export const getTodayCalendarEvents = createServerFn({ method: "GET" })
             isAllDay: e.isAllDay,
             source: e.source,
         }));
+    });
+
+// ── Notes / Knowledge Base ──
+
+/**
+ * Server function: list notes for the authenticated account.
+ */
+export const getNotes = createServerFn({ method: "GET" })
+    .inputValidator(
+        (data: { search?: string; tags?: string[]; capturedBy?: "user" | "agent"; limit?: number; offset?: number }) =>
+            data,
+    )
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        return store.list(account.id, {
+            tags: data.tags,
+            capturedBy: data.capturedBy,
+            limit: data.limit,
+            offset: data.offset,
+        });
+    });
+
+/**
+ * Server function: search notes by keyword.
+ */
+export const searchNotes = createServerFn({ method: "GET" })
+    .inputValidator((data: { query: string; tags?: string[] }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        return store.search(account.id, data.query, data.tags);
+    });
+
+/**
+ * Server function: get a single note by ID.
+ */
+export const getNote = createServerFn({ method: "GET" })
+    .inputValidator((data: { noteId: string }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        const note = await store.get(data.noteId);
+        if (!note || note.accountId !== account.id) return null;
+        return note;
+    });
+
+/**
+ * Server function: create a note from the dashboard (capturedBy: 'user').
+ */
+export const createDashboardNote = createServerFn({ method: "POST" })
+    .inputValidator(
+        (data: { title: string; content: string; tags?: string[] }) => data,
+    )
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        return store.create(account.id, {
+            title: data.title,
+            content: data.content,
+            tags: data.tags ?? [],
+            capturedBy: "user",
+        });
+    });
+
+/**
+ * Server function: update a note's title, content, or tags.
+ */
+export const updateNote = createServerFn({ method: "POST" })
+    .inputValidator(
+        (data: { noteId: string; title?: string; content?: string; tags?: string[] }) => data,
+    )
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        const { noteId, ...updates } = data;
+        return store.update(noteId, account.id, updates);
+    });
+
+/**
+ * Server function: delete a note.
+ */
+export const deleteNote = createServerFn({ method: "POST" })
+    .inputValidator((data: { noteId: string }) => data)
+    .handler(async ({ data }) => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        await store.delete(data.noteId, account.id);
+        return { success: true };
+    });
+
+/**
+ * Server function: get all unique tags for the authenticated account.
+ */
+export const getNoteTags = createServerFn({ method: "GET" })
+    .handler(async () => {
+        const account = await resolveAuthenticatedAccount();
+        const store = createNoteStore(db);
+        return store.tags(account.id);
     });

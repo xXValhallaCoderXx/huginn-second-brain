@@ -2,7 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { Memory } from "@mastra/memory";
 import { PgVector } from "@mastra/pg";
-import type { PersonalityStore, CalendarService } from "@huginn/shared";
+import type { PersonalityStore, CalendarService, NoteStore } from "@huginn/shared";
 import {
     BASE_INSTRUCTIONS,
     buildInstructions,
@@ -10,6 +10,9 @@ import {
 } from "../../identity/instructions.js";
 import { storage } from "../storage.js";
 import { getCalendarTool } from "../tools/get-calendar.js";
+import { saveNoteTool } from "../tools/save-note.js";
+import { recallNotesTool } from "../tools/recall-notes.js";
+import { deleteNoteTool } from "../tools/delete-note.js";
 
 const vector = new PgVector({
     id: "huginn-vector",
@@ -25,13 +28,21 @@ export type HuginnContext = {
     "account-id": string;
     "personality-store": PersonalityStore;
     "calendar-service"?: CalendarService;
+    "note-store"?: NoteStore;
+    "thread-id"?: string;
+    "channel"?: string;
 };
 
 export const huginnAgent = new Agent({
     id: "huginn",
     name: "Huginn",
     model: "openrouter/anthropic/claude-sonnet-4",
-    tools: { "get-calendar": getCalendarTool },
+    tools: {
+        "get-calendar": getCalendarTool,
+        "save-note": saveNoteTool,
+        "recall-notes": recallNotesTool,
+        "delete-note": deleteNoteTool,
+    },
 
     instructions: async ({ requestContext }) => {
         const accountId = requestContext?.get("account-id") as string;

@@ -9,3 +9,11 @@ export type {
     CalendarService,
     CalendarConnectionService,
 } from "./calendar";
+export type {
+    Note,
+    NoteSource,
+    CreateNoteInput,
+    UpdateNoteInput,
+    ListNotesOptions,
+    NoteStore,
+} from "./notes";

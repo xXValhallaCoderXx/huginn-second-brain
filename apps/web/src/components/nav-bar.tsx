@@ -3,6 +3,7 @@ import { Link, useMatches } from "@tanstack/react-router";
 const navLinks = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/chat", label: "Chat" },
+    { to: "/knowledge-base", label: "Knowledge" },
     { to: "/settings", label: "Settings" },
 ] as const;
 

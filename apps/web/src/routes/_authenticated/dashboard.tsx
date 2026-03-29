@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { getTodayCalendarEvents, loadPersonalityFiles } from "../../lib/server-fns";
+import { getTodayCalendarEvents, loadPersonalityFiles, getNotes } from "../../lib/server-fns";
 
 export interface SerializedCalendarEvent {
     id: string;
@@ -16,11 +16,12 @@ export interface SerializedCalendarEvent {
 export const Route = createFileRoute("/_authenticated/dashboard")({
     component: Dashboard,
     loader: async ({ context }) => {
-        const [personality, calendarEvents] = await Promise.all([
+        const [personality, calendarEvents, recentNotes] = await Promise.all([
             loadPersonalityFiles({ data: { accountId: context.account.id } }),
             getTodayCalendarEvents().catch(() => [] as SerializedCalendarEvent[]),
+            getNotes({ data: { limit: 5 } }).catch(() => []),
         ]);
-        return { personality, calendarEvents };
+        return { personality, calendarEvents, recentNotes };
     },
 });
 
@@ -64,7 +65,7 @@ function FormattedDescription({ text, maxLen = 120 }: { text: string; maxLen?: n
 
 function Dashboard() {
     const { account } = Route.useRouteContext();
-    const { personality, calendarEvents } = Route.useLoaderData();
+    const { personality, calendarEvents, recentNotes } = Route.useLoaderData();
     const [accountOpen, setAccountOpen] = useState(false);
 
     const soulSnippet = personality.soul
@@ -269,6 +270,64 @@ function Dashboard() {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* Saved Knowledge Preview */}
+                    <section className="rounded-2xl border border-border bg-surface overflow-hidden">
+                        <div className="p-6 border-b border-border">
+                            <h2 className="text-lg font-semibold text-text-heading flex items-center gap-2">
+                                <svg className="h-5 w-5 text-accent-light" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                </svg>
+                                Saved Knowledge
+                            </h2>
+                        </div>
+                        <div className="p-6">
+                            {recentNotes.length === 0 ? (
+                                <div className="text-center py-6">
+                                    <p className="text-sm text-text-muted">No notes yet</p>
+                                    <p className="text-xs text-text-subtle mt-1">
+                                        Chat with Huginn and it will start capturing knowledge.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {recentNotes.map((note) => (
+                                        <div key={note.id} className="flex items-start gap-2.5">
+                                            {note.capturedBy === "agent" ? (
+                                                <svg className="h-3.5 w-3.5 text-accent-light mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="h-3.5 w-3.5 text-text-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                                                </svg>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-medium text-text-heading truncate">{note.title}</p>
+                                                <p className="text-xs text-text-muted line-clamp-1">{note.content}</p>
+                                                {note.tags.length > 0 && (
+                                                    <div className="flex gap-1 mt-1">
+                                                        {note.tags.slice(0, 3).map((tag) => (
+                                                            <span key={tag} className="text-[10px] text-text-subtle">#{tag}</span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <Link
+                                        to="/knowledge-base"
+                                        className="mt-2 text-sm text-accent-light hover:text-accent font-medium flex items-center gap-1"
+                                    >
+                                        View all
+                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                                        </svg>
+                                    </Link>
                                 </div>
                             )}
                         </div>

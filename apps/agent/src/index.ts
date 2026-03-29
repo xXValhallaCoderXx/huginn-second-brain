@@ -8,7 +8,7 @@ import { cors } from "hono/cors";
 import { MastraServer } from "@mastra/hono";
 import type { HonoBindings, HonoVariables } from "@mastra/hono";
 import { RequestContext } from "@mastra/core/request-context";
-import { createDb, createPersonalityStore, createAccountService, createCalendarService } from "@huginn/shared";
+import { createDb, createPersonalityStore, createAccountService, createCalendarService, createNoteStore } from "@huginn/shared";
 
 import { mastra } from "./mastra/index.js";
 import { createBot, getBotUsername } from "./telegram/bot.js";
@@ -18,6 +18,7 @@ const db = createDb(process.env.DATABASE_URL!);
 const personalityStore = createPersonalityStore(db);
 const calendarService = createCalendarService(db);
 const accountService = createAccountService(db);
+const noteStore = createNoteStore(db);
 
 const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
@@ -54,6 +55,9 @@ app.post("/chat", async (c) => {
     requestContext.set("account-id", body.accountId);
     requestContext.set("personality-store", personalityStore);
     requestContext.set("calendar-service", calendarService);
+    requestContext.set("note-store", noteStore);
+    requestContext.set("thread-id", threadId);
+    requestContext.set("channel", "web");
 
     const response = await agent.generate(body.message, {
         requestContext,
@@ -88,6 +92,9 @@ app.post("/chat/stream", async (c) => {
     requestContext.set("account-id", body.accountId);
     requestContext.set("personality-store", personalityStore);
     requestContext.set("calendar-service", calendarService);
+    requestContext.set("note-store", noteStore);
+    requestContext.set("thread-id", threadId);
+    requestContext.set("channel", "web");
 
     const output = await agent.stream(body.message, {
         requestContext,
@@ -145,7 +152,7 @@ serve({ fetch: app.fetch, port }, () => {
 // --- Telegram bot (long polling) ---
 const bot = await createBot();
 if (bot) {
-    registerHandlers(bot, { mastra, accountService, personalityStore, calendarService, db });
+    registerHandlers(bot, { mastra, accountService, personalityStore, calendarService, noteStore, db });
     bot.start({
         onStart: () => console.log("[telegram] Bot started (long polling)"),
     });

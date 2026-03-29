@@ -5,3 +5,4 @@ export { createCalendarConnectionService } from "./calendar-connection-service";
 export { createCalendarService } from "./calendar-service";
 export { googleCalendarProvider } from "./google-calendar-provider";
 export { encryptToken, decryptToken } from "./crypto";
+export { createNoteStore } from "./note-store";
