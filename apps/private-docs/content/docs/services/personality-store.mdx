@@ -1,0 +1,180 @@
+---
+title: Personality Store
+description: Versioned storage for SOUL.md and IDENTITY.md personality files with append-only history and atomic version management.
+---
+
+# Personality Store
+
+The **PersonalityStore** manages versioned storage of **SOUL.md** and **IDENTITY.md** files that define each user's AI assistant personality. Uses **append-only versioning** — updates create new versions rather than overwriting, preserving full personality evolution history.
+
+## Interface
+
+```typescript
+interface PersonalityStore {
+  load(accountId: string, file: PersonalityFileType): Promise<string | null>;
+  save(
+    accountId: string,
+    file: PersonalityFileType,
+    content: string,
+    reason: string,
+  ): Promise<void>;
+  exists(accountId: string): Promise<boolean>;
+  history(accountId: string, file: PersonalityFileType, limit?: number): Promise<VersionEntry[]>;
+}
+
+type PersonalityFileType = "SOUL" | "IDENTITY";
+```
+
+## Factory Function
+
+```typescript
+import { createPersonalityStore } from "@huginn/shared";
+
+const personalityStore = createPersonalityStore(db);
+```
+
+**Location:** [`packages/shared/src/services/personality-store.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/personality-store.ts)
+
+## Core Concepts
+
+### 1. Append-Only Versioning
+
+**Never UPDATE, always INSERT:**
+
+```typescript
+// Creates version 1
+await store.save(accountId, "SOUL", "I am a helpful assistant", "Initial personality");
+
+// Creates version 2 (version 1 preserved)
+await store.save(accountId, "SOUL", "I am a creative AI companion", "More creative personality");
+
+// load() always returns latest version
+const current = await store.load(accountId, "SOUL"); // Returns version 2
+```
+
+**Benefits:**
+
+- **Full audit trail** — See how personality evolved over time
+- **Rollback capability** — Can reference any previous version
+- **No data loss** — Accidental overwrites are impossible
+
+### 2. Version Management
+
+**Automatic version incrementing:**
+
+```sql
+-- Implementation uses MAX(version) + 1 for each (accountId, fileType) pair
+SELECT COALESCE(MAX(version), 0) + 1
+FROM personality_files
+WHERE account_id = ? AND file_type = ?
+```
+
+**Database schema:** [`packages/shared/src/schema/personality-files.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/personality-files.ts)
+
+### 3. Two File Types
+
+| File Type    | Purpose                          | Content                                | Used By            |
+| ------------ | -------------------------------- | -------------------------------------- | ------------------ |
+| **SOUL**     | Core personality, behavior, tone | Prose describing assistant's character | Agent instructions |
+| **IDENTITY** | Context, background, preferences | Structured data about user's world     | Agent instructions |
+
+**Independent versioning:** Each file type has its own version sequence per account.
+
+## Key Methods
+
+### Loading Content
+
+```typescript
+// Returns latest version or null if no file exists
+const soul = await store.load(accountId, "SOUL");
+const identity = await store.load(accountId, "IDENTITY");
+```
+
+### Saving New Versions
+
+```typescript
+await store.save(
+  accountId,
+  "SOUL",
+  "Updated personality content...",
+  "Reason for this change", // Required for audit trail
+);
+```
+
+**Reason field:** Captures why the personality changed (user edit, AI suggestion, etc.)
+
+### Checking Existence
+
+```typescript
+// True if the account has ANY personality files
+const hasPersonality = await store.exists(accountId);
+```
+
+**Use case:** Determine if new accounts need personality seeding.
+
+### Version History
+
+```typescript
+const history = await store.history(accountId, "SOUL", 5);
+// Returns: VersionEntry[] (latest 5 versions)
+
+interface VersionEntry {
+  version: number;
+  content: string;
+  reason: string | null;
+  createdAt: string; // ISO timestamp
+}
+```
+
+## Usage Context
+
+| Layer                | Usage                                     | File                                                                                                                                                      |
+| -------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web App**          | CRUD personality files via UI             | [`apps/web/src/components/edit-identity-page.tsx`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/components/edit-identity-page.tsx) |
+| **Agent**            | Load personality for instruction building | [`apps/agent/src/identity/instructions.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/identity/instructions.ts)               |
+| **Account Creation** | Seed default personality files            | [`packages/shared/src/services/seed.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/seed.ts)                     |
+
+## Error Handling
+
+**Returns `null` for not-found:**
+
+```typescript
+const content = await store.load("nonexistent-account", "SOUL");
+// Returns: null (not an exception)
+```
+
+**No validation on content:** The store accepts any string content — validation happens in the UI layer.
+
+## Default Personality Seeding
+
+**New accounts get starter files:**
+
+```typescript
+import { seedNewAccount } from "@huginn/shared";
+
+// Creates default SOUL and IDENTITY files
+await seedNewAccount(db, accountId);
+```
+
+**Seeding location:** [`packages/shared/src/services/seed.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/seed.ts)
+
+## RequestContext Integration
+
+**Injected into agent requests:**
+
+```typescript
+// From apps/agent RequestContext
+const store = requestContext?.get("personality-store") as PersonalityStore;
+const accountId = requestContext?.get("account-id") as string;
+
+// Agent loads personality dynamically per request
+const soul = await store.load(accountId, "SOUL");
+const identity = await store.load(accountId, "IDENTITY");
+```
+
+**Pattern:** [RequestContext Pattern](/docs/patterns/request-context)
+
+## Related Services
+
+- [**Account Service**](/docs/services/account-service) — Account lifecycle that triggers personality seeding
+- [**Calendar Service**](/docs/services/calendar-service) — Combined with personality for context-rich agent instructions

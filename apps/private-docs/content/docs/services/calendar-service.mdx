@@ -1,0 +1,199 @@
+---
+title: Calendar Service
+description: Aggregates events across multiple calendar providers with automatic token refresh, deduplication, and context formatting for AI agents.
+---
+
+# Calendar Service
+
+The **CalendarService** aggregates calendar events across multiple connected calendar providers (Google Calendar, future Outlook, etc.) for each user. Handles **automatic token refresh**, **event deduplication**, and **context formatting** for AI agent consumption.
+
+## Interface
+
+```typescript
+interface CalendarService {
+  getEvents(accountId: string, range: { start: Date; end: Date }): Promise<CalendarEvent[]>;
+  formatForContext(events: CalendarEvent[]): string;
+}
+```
+
+## Factory Function
+
+```typescript
+import { createCalendarService } from "@huginn/shared";
+
+const calendarService = createCalendarService(db);
+```
+
+**Location:** [`packages/shared/src/services/calendar-service.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/calendar-service.ts)
+
+## Core Functionality
+
+### 1. Multi-Provider Aggregation
+
+**Fetches from all enabled connections:**
+
+```typescript
+const events = await calendarService.getEvents(accountId, {
+  start: new Date("2026-03-29T00:00:00Z"),
+  end: new Date("2026-03-30T00:00:00Z"),
+});
+// Returns: CalendarEvent[] (unified format across all providers)
+```
+
+**Provider support:**
+
+- ✅ **Google Calendar** — Production ready
+- 🚧 **Outlook/Exchange** — Future implementation
+- 🚧 **CalDAV** — Future implementation
+
+### 2. Automatic Token Refresh
+
+**Transparent token management:**
+
+```typescript
+// Automatically checks token expiry (60s buffer)
+// Refreshes via provider.refreshTokens() if needed
+// Persists new tokens to calendar_connections table
+const events = await calendarService.getEvents(accountId, range);
+```
+
+**Implementation:** Uses [`CalendarConnectionService`](/docs/services/calendar-connection-service) for encrypted token storage.
+
+### 3. Event Deduplication
+
+**Cross-provider deduplication:**
+
+```typescript
+// Prevents duplicate events if user has same calendar in multiple connections
+const key = `${event.source.provider}:${event.id}`;
+if (!seen.has(key)) {
+  seen.add(key);
+  events.push(event);
+}
+```
+
+### 4. Error Resilience
+
+**Partial failure handling:**
+
+```typescript
+// If some providers fail but others succeed: returns successful results
+// If ALL providers fail: throws error with details
+const results = await Promise.allSettled(providerFetches);
+```
+
+## Calendar Event Format
+
+**Unified event model:**
+
+```typescript
+interface CalendarEvent {
+  id: string; // Provider-specific event ID
+  title: string; // Event summary
+  description?: string; // Event details
+  start: Date; // Start time (UTC)
+  end: Date; // End time (UTC)
+  location?: string; // Meeting location/room
+  isAllDay: boolean; // All-day vs timed event
+  source: {
+    provider: CalendarProviderType; // "google" | "outlook" | "caldav"
+    connectionLabel: string; // User-friendly label for this connection
+  };
+}
+```
+
+## Context Formatting for AI
+
+**Converts events to agent-readable text:**
+
+```typescript
+const contextString = calendarService.formatForContext(events);
+```
+
+**Example output:**
+
+```
+── Today's Calendar ──
+  All day: Team Retreat (Work Calendar)
+  09:00–10:30  Sprint Planning (Work Calendar)
+  11:00–12:00  1:1 with Manager (Work Calendar)
+  14:00–15:00  Doctor Appointment (Personal)
+```
+
+**Format features:**
+
+- **Time format:** 24-hour format (`HH:MM`)
+- **Connection labels:** Shows which calendar each event comes from
+- **All-day events:** Listed separately at the top
+- **Chronological order:** Events sorted by start time
+
+## Calendar Connection Service
+
+**Dependencies:** Uses [`CalendarConnectionService`](/docs/services/calendar-connection-service) internally:
+
+```typescript
+const connSvc = createCalendarConnectionService(db);
+
+// Fetches only enabled connections
+const connections = await connSvc.getEnabledConnections(accountId);
+```
+
+**Token storage:** All OAuth tokens are AES-256-GCM encrypted at rest.
+
+## Provider Architecture
+
+**Pluggable provider system:**
+
+```typescript
+const providers: Record<string, CalendarProvider> = {
+  google: googleCalendarProvider,
+  // outlook: outlookCalendarProvider,  // Future
+  // caldav: caldavCalendarProvider,    // Future
+};
+```
+
+**Provider interface:** [`CalendarProvider`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/types/calendar.ts)
+
+## Usage Context
+
+| Layer                  | Usage                            | File                                                                                                                                                |
+| ---------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agent Instructions** | Daily calendar context injection | [`apps/agent/src/identity/instructions.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/identity/instructions.ts)         |
+| **Agent Tools**        | On-demand calendar queries       | [`apps/agent/src/mastra/tools/get-calendar.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/mastra/tools/get-calendar.ts) |
+| **Daily Briefing**     | Morning briefing generation      | [`apps/agent/src/workflows/daily-briefing.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/workflows/daily-briefing.ts)   |
+
+## Caching Strategy
+
+**In-memory caching** with 5-minute TTL for frequently accessed today's events:
+
+**Location:** [`apps/agent/src/calendar-cache.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/calendar-cache.ts)
+
+## Error Scenarios
+
+### Partial Provider Failures
+
+```typescript
+try {
+  const events = await calendarService.getEvents(accountId, range);
+  // Returns events from successful providers
+} catch (error) {
+  // Only throws if ALL providers failed
+}
+```
+
+### Token Refresh Failures
+
+**Graceful degradation:** If token refresh fails, the connection is skipped and other connections continue working.
+
+### No Connections
+
+```typescript
+const events = await calendarService.getEvents(accountId, range);
+// Returns: [] (empty array, not an error)
+```
+
+## Related Services
+
+- [**CalendarConnectionService**](/docs/services/calendar-connection-service) — OAuth connection and token management
+- [**GoogleCalendarProvider**](/docs/services/google-calendar-provider) — Google Calendar API implementation
+- [**AccountService**](/docs/services/account-service) — Account-scoped calendar access

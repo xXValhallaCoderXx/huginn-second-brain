@@ -1,0 +1,141 @@
+---
+title: Account Service
+description: Core service for user account management, channel linking, and one-time linking codes with race-condition-safe operations.
+---
+
+# Account Service
+
+The **AccountService** is the central user management service that handles Huginn account creation, channel linking (Telegram), and secure linking workflows. It bridges Better Auth sessions with Huginn's account model.
+
+## Interface
+
+```typescript
+interface AccountService {
+  // Account management
+  createAccount(googleSub: string, email: string, displayName?: string): Promise<Account>;
+  getAccountByGoogleSub(googleSub: string): Promise<Account | null>;
+  getAccountById(id: string): Promise<Account | null>;
+
+  // Channel linking
+  linkChannel(
+    accountId: string,
+    provider: "telegram",
+    providerUserId: string,
+  ): Promise<ChannelLink>;
+  unlinkChannel(accountId: string, provider: "telegram"): Promise<void>;
+  resolveAccountFromChannel(provider: "telegram", providerUserId: string): Promise<Account | null>;
+  getChannelLinks(accountId: string): Promise<ChannelLink[]>;
+
+  // Linking codes (one-time use)
+  createLinkingCode(accountId: string, provider: "telegram"): Promise<string>;
+  verifyLinkingCode(code: string): Promise<{ accountId: string; provider: string } | null>;
+}
+```
+
+## Factory Function
+
+```typescript
+import { createAccountService } from "@huginn/shared";
+
+const accountService = createAccountService(db);
+```
+
+**Location:** [`packages/shared/src/services/account-service.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/account-service.ts)
+
+## Key Design Decisions
+
+### 1. Error Handling
+
+**Returns `null` for not-found** — Service methods return `null` instead of throwing errors when records don't exist:
+
+```typescript
+const account = await accountService.getAccountById("nonexistent");
+// Returns: null (not an exception)
+```
+
+This pattern is consistent across all Huginn services and simplifies caller error handling.
+
+### 2. Account ↔ Better Auth Bridge
+
+**Two separate user tables:**
+
+- **Better Auth:** `user`, `session`, `account` tables (OAuth management)
+- **Huginn:** `accounts` table (application-specific user data)
+
+**Bridge field:** `accounts.googleSub` = Better Auth `account.accountId` (Google's `sub` claim)
+
+```typescript
+// Helper function to resolve BA user → Huginn account
+export async function getGoogleSubForBaUser(db: Database, baUserId: string): Promise<string | null>;
+```
+
+### 3. Channel Linking with Upsert
+
+**One account, one channel per provider:**
+
+```typescript
+await accountService.linkChannel(accountId, "telegram", telegramUserId);
+// If already linked: updates providerUserId
+// If new: creates the link
+// Constraint: UNIQUE(accountId, provider)
+```
+
+**Database constraint:** [`channel_links`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/schema/channel-links.ts) table has unique composite index on `(accountId, provider)`.
+
+### 4. Race-Condition-Safe Linking Codes
+
+**Problem:** Multiple Telegram bot instances could process the same `/start LINK-CODE` simultaneously.
+
+**Solution:** Atomic verify-and-consume in a single UPDATE:
+
+```typescript
+import { verifyAndConsumeLinkingCode } from "@huginn/shared";
+
+// Only ONE concurrent caller succeeds
+const result = await verifyAndConsumeLinkingCode(db, "LINK-ABCD");
+// Returns: { accountId, provider } | null
+```
+
+**Implementation:** Uses `UPDATE ... SET used = true WHERE used = false AND ...` — database ensures atomicity.
+
+## Helper Functions
+
+### Account Management
+
+```typescript
+import { ensureAccount, deleteAccount } from "@huginn/shared";
+
+// Create account with specific ID (useful for tests/seeding)
+await ensureAccount(db, accountId, googleSub, email, displayName);
+
+// Cascading delete (removes personality_files, channel_links, etc.)
+await deleteAccount(db, accountId);
+```
+
+### Linking Code Management
+
+```typescript
+import { consumeLinkingCode } from "@huginn/shared";
+
+// Mark code as used (separate from verification for idempotency)
+await consumeLinkingCode(db, "LINK-ABCD");
+```
+
+## Usage Context
+
+| Layer         | Usage                                    | File                                                                                                                                              |
+| ------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web App**   | Session → account resolution, linking UI | [`apps/web/src/lib/server-fns.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/src/lib/server-fns.ts)                         |
+| **Agent**     | Channel message → account lookup         | [`apps/agent/src/telegram/handlers.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/telegram/handlers.ts)               |
+| **Workflows** | Account-scoped operations                | [`apps/agent/src/workflows/daily-briefing.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/agent/src/workflows/daily-briefing.ts) |
+
+## Code Generation
+
+**Linking codes** are 8-character strings: `LINK-` + 2 random hex bytes (e.g., `LINK-A4B7`).
+
+**Expiration:** 10 minutes from creation. Expired codes are automatically excluded from verification queries.
+
+## Related Services
+
+- [**PersonalityStore**](/docs/services/personality-store) — Account-scoped personality file management
+- [**CalendarService**](/docs/services/calendar-service) — Account-scoped calendar integration

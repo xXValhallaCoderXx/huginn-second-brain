@@ -3,46 +3,68 @@ title: Dashboard Overview
 description: Understand what the Huginn dashboard shows and how to navigate the app.
 ---
 
-The dashboard is your central hub. It gives you a snapshot of your account, your personality files, your connected channels, and quick access to every feature.
+The dashboard is your home base. When you sign in, it greets you by name, shows your calendar events for today, and gives you quick shortcuts to common tasks.
 
 ## Navigation
 
-The top navigation bar is present on every page. It gives you access to:
+The top navigation bar is always visible. It links to three areas:
 
-| Link            | What it opens                        |
-| --------------- | ------------------------------------ |
-| **Chat**        | The real-time conversation interface |
-| **Personality** | The SOUL and IDENTITY file editor    |
-| **Channels**    | Your connected messaging channels    |
-| **Calendars**   | Your linked calendar accounts        |
-| **Dashboard**   | This overview page                   |
-
-## Account Details panel
-
-The left sidebar on the dashboard shows your account information:
-
-- **Email** — your Google account email
-- **Display Name** — your name from Google
-- **Instance ID** — your unique Huginn account ID (useful for support)
-- **Status** — always Online when you're signed in
-
-## Quick Actions panel
-
-Below the account details you'll find one-click shortcuts to the most common tasks: opening the chat, managing channels, editing your personality, and connecting a calendar.
-
-## Personality summary
-
-The main area shows a live preview of your current SOUL and IDENTITY files. If you haven't set them up yet, you'll see a prompt to get started. Once you've saved content, the snippet displays the first few lines so you can quickly confirm your personality is loaded.
+| Link           | What it opens                                                |
+| -------------- | ------------------------------------------------------------ |
+| **Dashboard**  | This overview page                                           |
+| **Chat**       | The real-time conversation interface                         |
+| **Settings**   | Personality, Channels, Calendars, and Account management     |
 
 <Callout type="info">
-  The dashboard pulls the **latest version** of each file. Personality files are versioned — every
-  save creates a new version, and the dashboard always shows the most recent one.
+  On mobile, navigation appears as a bottom tab bar with the same three destinations.
 </Callout>
 
-## Connected Channels panel
+## Dashboard layout
 
-The right side of the dashboard shows which channels are connected. A green badge means a channel is linked; a grey badge means it isn't. Click **Connect** next to any channel to begin the linking flow.
+The dashboard uses a two-column layout on larger screens and stacks to a single column on mobile.
 
-## Sign out
+### Left column
 
-Click **Sign Out** in the navigation or from the dashboard to end your session. Your data is preserved — signing back in restores everything.
+**Greeting card** — Shows a time-aware greeting ("Good morning", "Good afternoon", or "Good evening") with your display name and a live **Huginn is online** indicator.
+
+**Quick Actions** — One-click shortcuts to the three most common tasks:
+
+- **Chat with Huginn** — opens the conversation interface
+- **Edit Personality** — jumps directly to the Personality tab in Settings
+- **Manage Channels** — jumps directly to the Channels tab in Settings
+
+**Personality Snapshot** — Shows the opening portion of your active SOUL file so you can quickly confirm your personality is loaded. Only appears once you have a SOUL file saved. Click **View full personality file** to go to the Personality editor.
+
+**Account Details** — A collapsible section showing your Account ID and email address. For full account management, go to **Settings > Account**.
+
+### Right column
+
+**Today's Agenda** — Lists all your calendar events for today in a timeline view. Each event shows its title, time range (or "All day"), description, and location when available.
+
+If you have no calendar connected, an empty state appears with a **Connect a calendar** link that takes you straight to the Calendars tab in Settings.
+
+<Callout type="info">
+  Calendar data is cached and refreshes approximately every 5 minutes. If a recently-added event
+  isn't showing yet, reload the page after a moment.
+</Callout>
+
+## Settings
+
+All configuration is collected under a single **Settings** page in the top navigation. It has four tabs:
+
+| Tab             | What it manages                                                  |
+| --------------- | ---------------------------------------------------------------- |
+| **Personality** | Edit your SOUL and IDENTITY files                                |
+| **Channels**    | Connect and manage messaging channels (Telegram)                 |
+| **Calendars**   | Connect and manage Google Calendar accounts                      |
+| **Account**     | Profile information, Instance ID, and Sign Out                   |
+
+You can navigate directly to a specific tab — for example, the Quick Actions on the dashboard link directly to the Personality and Channels tabs.
+
+## Account tab
+
+The **Account** tab inside Settings shows:
+
+- **Profile card** — your avatar initial, display name, email address, and a **Google OAuth** label confirming your sign-in method.
+- **Instance ID** — your unique Huginn identifier. Use the copy button to copy it quickly if you ever need it for support.
+- **Sign Out** — ends your session on this device. Your data and personality files are preserved — signing back in restores everything.

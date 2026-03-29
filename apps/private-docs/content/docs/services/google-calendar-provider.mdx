@@ -1,0 +1,241 @@
+---
+title: Google Calendar Provider
+description: Google Calendar API v3 HTTP client implementing the CalendarProvider interface with calendar filtering, event attendance rules, and OAuth token management.
+---
+
+# Google Calendar Provider
+
+The **Google Calendar Provider** implements the [`CalendarProvider`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/types/calendar.ts) interface for Google Calendar API v3. Handles **calendar filtering**, **event attendance rules**, **OAuth token refresh**, and **API pagination** without depending on the googleapis SDK.
+
+## Provider Implementation
+
+```typescript
+const googleCalendarProvider: CalendarProvider = {
+  provider: "google",
+  getEvents(connection, range): Promise<CalendarEvent[]>,
+  refreshTokens(connection): Promise<{ accessToken, refreshToken, expiresAt }>
+};
+```
+
+**Location:** [`packages/shared/src/services/google-calendar-provider.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/packages/shared/src/services/google-calendar-provider.ts)
+
+## Key Features
+
+### 1. Calendar Filtering
+
+**Only includes calendars the user actively manages:**
+
+```typescript
+// Only calendars where user has accessRole = "owner" or "writer"
+const isWritable = cal.accessRole === "owner" || cal.accessRole === "writer";
+```
+
+**Excludes:**
+
+- **Subscribed calendars** — Public calendars user has subscribed to
+- **Read-only shared calendars** — Calendars shared with "reader" permission
+- **Deleted/hidden calendars** — Calendars marked as deleted or hidden
+
+**Rationale:** Focus on calendars representing the user's actual schedule rather than reference calendars.
+
+### 2. Event Attendance Filtering
+
+**Filters out declined events:**
+
+```typescript
+// Skip events where the user has explicitly declined
+const self = event.attendees?.find((a) => a.self);
+if (self?.responseStatus === "declined") return null;
+```
+
+**Attendance states:**
+
+- ✅ `"accepted"`, `"tentative"`, `"needsAction"` — Included
+- ❌ `"declined"` — Excluded
+- ✅ **No attendee info** — Included (assume personal event)
+
+### 3. Multi-Calendar Fetching
+
+**Parallel fetching across all user calendars:**
+
+```typescript
+// 1. List all accessible calendars
+const calendarIds = await listCalendarIds(authHeader);
+
+// 2. Fetch events from each calendar in parallel
+const results = await Promise.allSettled(
+  calendarIds.map((calId) => fetchEventsForCalendar(calId, range, authHeader, label)),
+);
+```
+
+**Error resilience:** Individual calendar failures don't break the entire fetch.
+
+## API Integration
+
+### Google Calendar API v3
+
+**Base URL:** `https://www.googleapis.com/calendar/v3`
+
+**Key endpoints:**
+
+- `/users/me/calendarList` — List user's calendars
+- `/calendars/{calendarId}/events` — Fetch events for a specific calendar
+
+**Authentication:** Bearer token via `Authorization: Bearer {accessToken}`
+
+### Query Parameters
+
+**Event fetching parameters:**
+
+```typescript
+const params = {
+  timeMin: range.start.toISOString(), // RFC3339 timestamp
+  timeMax: range.end.toISOString(), // RFC3339 timestamp
+  singleEvents: "true", // Expand recurring events
+  orderBy: "startTime", // Chronological order
+  maxResults: "250", // Max per page
+  fields:
+    "items(id,summary,description,location,start,end,status,attendees(email,self,responseStatus)),nextPageToken",
+};
+```
+
+**Pagination:** Handles `nextPageToken` automatically for large result sets.
+
+## Event Format Mapping
+
+**Google → Huginn event mapping:**
+
+```typescript
+function toCalendarEvent(googleEvent: GoogleEvent, connectionLabel: string): CalendarEvent | null {
+  // Filter cancelled events
+  if (googleEvent.status === "cancelled") return null;
+
+  // Handle all-day vs timed events
+  const isAllDay = !googleEvent.start.dateTime;
+  const startStr = googleEvent.start.dateTime ?? googleEvent.start.date;
+  const endStr = googleEvent.end?.dateTime ?? googleEvent.end?.date;
+
+  return {
+    id: googleEvent.id,
+    title: googleEvent.summary ?? "(No title)",
+    description: googleEvent.description,
+    start: new Date(startStr),
+    end: endStr ? new Date(endStr) : new Date(startStr),
+    location: googleEvent.location,
+    isAllDay,
+    source: {
+      provider: "google",
+      connectionLabel, // DisplayName or email from connection
+    },
+  };
+}
+```
+
+## OAuth Token Management
+
+### Token Refresh
+
+**Automatic refresh** using Google's token endpoint:
+
+```typescript
+const res = await fetch("https://oauth2.googleapis.com/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    refresh_token: connection.refreshToken,
+    grant_type: "refresh_token",
+  }),
+});
+```
+
+**Environment requirements:**
+
+- `GOOGLE_CLIENT_ID` — OAuth client ID
+- `GOOGLE_CLIENT_SECRET` — OAuth client secret
+
+**Token persistence:** New tokens are persisted via [`CalendarConnectionService`](/docs/services/calendar-connection-service).
+
+### Refresh Token Rotation
+
+**Google may return new refresh token:**
+
+```typescript
+return {
+  accessToken: data.access_token,
+  refreshToken: data.refresh_token ?? connection.refreshToken, // Fallback to existing
+  expiresAt: new Date(Date.now() + data.expires_in * 1000),
+};
+```
+
+## Error Handling
+
+### API Errors
+
+**HTTP error mapping:**
+
+```typescript
+if (!res.ok) {
+  const body = await res.text();
+  throw new Error(`Google Calendar API error ${res.status} for ${calendarId}: ${body}`);
+}
+```
+
+**Common error cases:**
+
+- `401` — Access token expired/invalid (triggers refresh)
+- `403` — Insufficient permissions or quota exceeded
+- `404` — Calendar not found (calendar was deleted)
+
+### Network Resilience
+
+**Individual calendar failure isolation:**
+
+```typescript
+const results = await Promise.allSettled(calendarFetches);
+// Logs warnings for failed calendars but continues with successful ones
+```
+
+## OAuth Scopes Required
+
+**Google Calendar OAuth scope:**
+
+```
+https://www.googleapis.com/auth/calendar.readonly
+```
+
+**Scope configuration:** Set in [`apps/web/server/api/calendar/callback.ts`](file:///home/nate/Dungeon/Personal/huginn-second-brain/apps/web/server/api/calendar/callback.ts) OAuth flow.
+
+## Usage Context
+
+**Indirect usage** through [`CalendarService`](/docs/services/calendar-service):
+
+```typescript
+// CalendarService internally uses the provider
+const calendarService = createCalendarService(db);
+const events = await calendarService.getEvents(accountId, range);
+```
+
+**Provider registration:**
+
+```typescript
+const providers: Record<string, CalendarProvider> = {
+  google: googleCalendarProvider,
+};
+```
+
+## Future Provider Implementations
+
+**Provider interface allows multiple implementations:**
+
+- 🚧 **Outlook/Exchange Provider** — Microsoft Graph API
+- 🚧 **CalDAV Provider** — Standards-based calendar protocol
+- 🚧 **Apple Calendar Provider** — EventKit bridge
+
+**Extension pattern:** Each provider implements the same interface for seamless integration.
+
+## Related Services
+
+- [**CalendarService**](/docs/services/calendar-service) — High-level calendar aggregation that uses this provider
+- [**CalendarConnectionService**](/docs/services/calendar-connection-service) — OAuth connection storage that provides tokens to this provider
